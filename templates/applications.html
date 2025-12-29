@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<section>
+  <h2>2. 申請一覧</h2>
+  {% if applications %}
+    <div class="grid">
+      {% for app_item in applications %}
+        <article class="card">
+          <header>
+            <h3>申請ID: {{ app_item.id }}</h3>
+            <span class="badge {{ app_item.approval_status }}">{{ app_item.approval_status }}</span>
+          </header>
+          <dl>
+            <div><dt>申請者</dt><dd>{{ app_item.applicant_name }}</dd></div>
+            <div><dt>日付</dt><dd>{{ app_item.date_display() or '未取得' }}</dd></div>
+            <div><dt>宛先</dt><dd>{{ app_item.recipient or '未取得' }}</dd></div>
+            <div><dt>金額</dt><dd>{{ app_item.amount_display() or '未取得' }}</dd></div>
+            <div><dt>登録番号</dt><dd>{{ app_item.registration_number or '未取得' }}</dd></div>
+            <div><dt>OCRテキスト</dt><dd><pre>{{ app_item.ocr_text }}</pre></dd></div>
+            <div><dt>領収書</dt><dd><a href="{{ url_for('uploaded_file', filename=app_item.image_filename) }}" target="_blank">画像を開く</a></dd></div>
+          </dl>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>登録された申請はまだありません。</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<section>
+  <h2>1. 領収書申請</h2>
+  <p>領収書画像から日付・宛先・金額・登録番号をOCRで抽出し、申請として保存します。</p>
+  <form action="{{ url_for('submit_application') }}" method="post" enctype="multipart/form-data" class="card">
+    <div class="field">
+      <label for="applicant_name">申請者</label>
+      <input type="text" id="applicant_name" name="applicant_name" value="{{ default_applicant }}" required>
+    </div>
+    <div class="field">
+      <label for="receipt">領収書画像</label>
+      <input type="file" id="receipt" name="receipt" accept="image/*" required>
+    </div>
+    <p class="hint">OCR精度を高めるため、文字が鮮明な画像をご利用ください。Tesseract がインストールされていない場合はテキストが抽出されないことがあります。</p>
+    <button type="submit">抽出して申請を登録</button>
+  </form>
+</section>
+{% endblock %}

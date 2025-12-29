@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block content %}
+<section>
+  <h2>3. 承認チェック</h2>
+  <p>領収書画像と抽出結果を確認し、OK / NG を入力してください。</p>
+  {% if applications %}
+    <div class="grid">
+      {% for app_item in applications %}
+        <article class="card">
+          <header>
+            <h3>申請ID: {{ app_item.id }}</h3>
+            <span class="badge {{ app_item.approval_status }}">{{ app_item.approval_status }}</span>
+          </header>
+          <dl>
+            <div><dt>申請者</dt><dd>{{ app_item.applicant_name }}</dd></div>
+            <div><dt>日付</dt><dd>{{ app_item.date_display() or '未取得' }}</dd></div>
+            <div><dt>宛先</dt><dd>{{ app_item.recipient or '未取得' }}</dd></div>
+            <div><dt>金額</dt><dd>{{ app_item.amount_display() or '未取得' }}</dd></div>
+            <div><dt>登録番号</dt><dd>{{ app_item.registration_number or '未取得' }}</dd></div>
+            <div><dt>領収書</dt><dd><a href="{{ url_for('uploaded_file', filename=app_item.image_filename) }}" target="_blank">画像を開く</a></dd></div>
+            <div><dt>OCRテキスト</dt><dd><pre>{{ app_item.ocr_text }}</pre></dd></div>
+          </dl>
+          <form action="{{ url_for('update_approval', application_id=app_item.id) }}" method="post" class="approval-form">
+            <label>
+              <span>結果</span>
+              <select name="approval_status">
+                <option value="pending" {% if app_item.approval_status == 'pending' %}selected{% endif %}>未確認</option>
+                <option value="ok" {% if app_item.approval_status == 'ok' %}selected{% endif %}>OK</option>
+                <option value="ng" {% if app_item.approval_status == 'ng' %}selected{% endif %}>NG</option>
+              </select>
+            </label>
+            <label>
+              <span>メモ</span>
+              <textarea name="approval_notes" rows="2" placeholder="確認メモを入力">{{ app_item.approval_notes or '' }}</textarea>
+            </label>
+            <button type="submit">更新</button>
+          </form>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>確認する申請がまだありません。</p>
+  {% endif %}
+</section>
+{% endblock %}
