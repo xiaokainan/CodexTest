@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>3. 承認・突合</h2>
+    <p>領収書画像と抽出値を確認し、OK/NGを記録します。</p>
+    <form action="/approvals/bulk" method="post" class="card">
+        <div class="form-row">
+            <label>承認者名</label>
+            <input type="text" name="reviewer" value="approver" required>
+        </div>
+        {% if submissions|length == 0 %}
+            <p>確認できる申請がありません。</p>
+        {% else %}
+            <div class="grid">
+                {% for submission in submissions %}
+                <div class="card">
+                    <div class="card-header">
+                        <strong>ID {{ submission.id }}</strong> / {{ submission.applicant }} / {{ submission.created_at.strftime('%Y-%m-%d %H:%M') }}
+                    </div>
+                    <div class="card-body">
+                        <p><strong>日付:</strong> {{ submission.date or '-' }}</p>
+                        <p><strong>宛先:</strong> {{ submission.recipient or '-' }}</p>
+                        <p><strong>金額:</strong> {{ submission.amount or '-' }}</p>
+                        <p><strong>登録番号:</strong> {{ submission.registration_number or '-' }}</p>
+                        <p><strong>OCR全文:</strong><br>{{ submission.ocr_text or '-' }}</p>
+                        <p><strong>領収書:</strong><br><img src="/{{ submission.image_path }}" alt="receipt" class="thumb"></p>
+                        <div class="form-row inline">
+                            <label>判定</label>
+                            <label><input type="radio" name="status_{{ submission.id }}" value="OK"> OK</label>
+                            <label><input type="radio" name="status_{{ submission.id }}" value="NG"> NG</label>
+                        </div>
+                        <div class="form-row">
+                            <label>コメント</label>
+                            <textarea name="note_{{ submission.id }}" rows="2"></textarea>
+                        </div>
+                        {% if latest_reviews[submission.id] %}
+                            <div class="alert info">
+                                最新の承認: {{ latest_reviews[submission.id].status }} / {{ latest_reviews[submission.id].reviewer }} / {{ latest_reviews[submission.id].created_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% if latest_reviews[submission.id].note %}<br>コメント: {{ latest_reviews[submission.id].note }}{% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <button type="submit">一括で保存</button>
+        {% endif %}
+    </form>
+</section>
+{% endblock %}

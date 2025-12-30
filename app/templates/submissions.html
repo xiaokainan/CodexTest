@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>2. 申請一覧</h2>
+    {% if created %}
+        <div class="alert success">申請を登録しました。</div>
+    {% endif %}
+    {% if submissions|length == 0 %}
+        <p>まだ申請がありません。トップページから領収書を登録してください。</p>
+    {% else %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>申請者</th>
+                <th>日付</th>
+                <th>宛先</th>
+                <th>金額</th>
+                <th>登録番号</th>
+                <th>画像</th>
+                <th>登録日時</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for submission in submissions %}
+            <tr>
+                <td>{{ submission.id }}</td>
+                <td>{{ submission.applicant }}</td>
+                <td>{{ submission.date or '-' }}</td>
+                <td>{{ submission.recipient or '-' }}</td>
+                <td>{{ submission.amount or '-' }}</td>
+                <td>{{ submission.registration_number or '-' }}</td>
+                <td><a href="/{{ submission.image_path }}" target="_blank">表示</a></td>
+                <td>{{ submission.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</section>
+{% endblock %}

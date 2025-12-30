@@ -1,0 +1,89 @@
+:root {
+    --primary: #0f7bff;
+    --bg: #f7f8fa;
+    --border: #e0e4ea;
+    --text: #222;
+}
+
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+header {
+    background: white;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0;
+    margin-bottom: 16px;
+}
+.container {
+    width: min(1080px, 94vw);
+    margin: 0 auto;
+}
+nav a {
+    margin-right: 12px;
+    color: var(--primary);
+    text-decoration: none;
+}
+h1 {
+    margin: 0 0 8px 0;
+}
+h2 { margin-top: 0; }
+form.card, .card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+label { display: block; margin-bottom: 6px; font-weight: 600; }
+input[type="text"], input[type="file"], textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+button {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+}
+button:hover { opacity: 0.9; }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+th, td {
+    border: 1px solid var(--border);
+    padding: 8px;
+    text-align: left;
+}
+th { background: #f0f4fa; }
+.alert {
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+.alert.success { background: #e6f6e6; border: 1px solid #95d6a4; }
+.alert.info { background: #e6f0fb; border: 1px solid #aac7ff; }
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+}
+.card-header { font-weight: 700; margin-bottom: 8px; }
+.thumb {
+    max-width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+.form-row.inline label { display: inline-block; margin-right: 10px; }
+textarea { resize: vertical; }

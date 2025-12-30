@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+.envrc
+.env.local
+.idea/
+.vscode/
+.DS_Store
+*.db
+app.db
+/data/app.db
+/data/receipts/*
+!/data/receipts/.gitkeep
