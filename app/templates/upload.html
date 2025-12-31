@@ -3,14 +3,17 @@
 <section>
     <h2>1. 申請（領収書アップロード）</h2>
     <p>領収書画像をアップロードすると、日付・宛先・金額・登録番号をOCRで抽出し、申請として保存します。</p>
+    {% if not user %}
+        <div class="alert info">申請するにはログインしてください。</div>
+    {% endif %}
     <form action="/submissions" method="post" enctype="multipart/form-data" class="card">
         <label>申請者</label>
-        <input type="text" name="applicant" value="{{ default_applicant }}" required>
+        <input type="text" name="applicant" value="{{ default_applicant }}" required {% if not user %}disabled{% endif %}>
 
         <label>領収書画像</label>
-        <input type="file" name="file" accept="image/*" required>
+        <input type="file" name="file" accept="image/*" required {% if not user %}disabled{% endif %}>
 
-        <button type="submit">申請として登録</button>
+        <button type="submit" {% if not user %}disabled{% endif %}>申請として登録</button>
     </form>
 </section>
 {% endblock %}

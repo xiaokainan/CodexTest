@@ -13,29 +13,47 @@
             <tr>
                 <th>ID</th>
                 <th>申請者</th>
+                <th>ログインID</th>
                 <th>日付</th>
                 <th>宛先</th>
                 <th>金額</th>
                 <th>登録番号</th>
                 <th>画像</th>
                 <th>登録日時</th>
+                <th>詳細</th>
             </tr>
         </thead>
         <tbody>
             {% for submission in submissions %}
-            <tr>
+            <tr class="clickable-row" data-detail="/submissions/{{ submission.id }}">
                 <td>{{ submission.id }}</td>
                 <td>{{ submission.applicant }}</td>
+                <td>{{ submission.applicant_login or '-' }}</td>
                 <td>{{ submission.date or '-' }}</td>
                 <td>{{ submission.recipient or '-' }}</td>
                 <td>{{ submission.amount or '-' }}</td>
                 <td>{{ submission.registration_number or '-' }}</td>
                 <td><a href="/{{ submission.image_path }}" target="_blank">表示</a></td>
                 <td>{{ submission.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td><button type="button" onclick="openDetail('/submissions/{{ submission.id }}')">詳細</button></td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     {% endif %}
 </section>
+<script>
+function openDetail(url) {
+    window.open(url, '_blank', 'width=1200,height=800');
+}
+document.querySelectorAll('.clickable-row').forEach(row => {
+    row.addEventListener('click', (event) => {
+        if (event.target.tagName === 'BUTTON' || event.target.tagName === 'A') {
+            return;
+        }
+        const url = row.dataset.detail;
+        if (url) openDetail(url);
+    });
+});
+</script>
 {% endblock %}

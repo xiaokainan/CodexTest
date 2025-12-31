@@ -7,14 +7,19 @@
 2. **申請一覧**: これまでの申請をテーブルで表示。画像へのリンク付き。
 3. **承認画面**: 申請ごとに領収書と抽出値を突合し、OK/NG とコメントを一括保存。最新の承認履歴を確認可能。
 
-## セットアップ (Windows 11)
-1. **Python を用意**
-   - 公式サイトまたは Microsoft Store から Python 3.11+ をインストールし、`Add python.exe to PATH` を有効にする。
-2. **Tesseract OCR をインストール**
-   - [UB Mannheim 版](https://github.com/UB-Mannheim/tesseract/wiki) など Windows 用インストーラをダウンロードし、セットアップ。
-   - セットアップ時に `Add to PATH` をオン、またはインストール先 (例: `C:\Program Files\Tesseract-OCR\tesseract.exe`) を控える。
-   - 日本語対応のために `jpn` 言語データを含むパッケージを選択。
-3. **依存パッケージをインストール**
+## セットアップ & 検証手順 (Windows 11 想定)
+以下は **担当者 / 場所 / 実施内容 / 成功確認** を明記したステップバイステップ手順です。
+
+1. **担当: 開発/検証者・場所: ローカル PC**
+   - Python 3.11+ をインストール（公式サイト or Microsoft Store）。セットアップ時に `Add python.exe to PATH` をオン。
+   - **確認:** PowerShell で `python --version` を実行し、バージョンが表示されれば OK。
+
+2. **担当: 開発/検証者・場所: ローカル PC**
+   - Tesseract OCR をインストール（例: [UB Mannheim 版](https://github.com/UB-Mannheim/tesseract/wiki)）。`Add to PATH` をオン、もしくはインストール先 (例: `C:\Program Files\Tesseract-OCR\tesseract.exe`) を控える。日本語データ `jpn` を含むパッケージを選択。
+   - **確認:** PowerShell で `tesseract --version` を実行し、バージョンが表示されれば OK。
+
+3. **担当: 開発/検証者・場所: リポジトリ直下**
+   - 仮想環境と依存ライブラリをセットアップ。
    ```powershell
    cd path\to\CodexTest
    python -m venv .venv
@@ -22,13 +27,39 @@
    python -m pip install --upgrade pip
    pip install -r requirements.txt
    ```
-4. **アプリを起動**
+   - **確認:** `python -m compileall app` でエラーが出なければ環境構築完了。
+
+4. **担当: 開発/検証者・場所: リポジトリ直下**
+   - (Tesseract を PATH に通していない場合のみ) 環境変数でパスを指定。
    ```powershell
-   # Tesseract を PATH に追加していない場合は環境変数で指定
-   # set TESSERACT_CMD="C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+   # 例: setx TESSERACT_CMD "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+   ```
+   - **確認:** 再度 PowerShell を開き、`echo %TESSERACT_CMD%` で設定値が表示される。
+
+5. **担当: 開発/検証者・場所: リポジトリ直下**
+   - アプリを起動。
+   ```powershell
    uvicorn app.main:app --reload
    ```
-   - ブラウザで `http://127.0.0.1:8000/` にアクセス。
+   - **確認:** ブラウザで `http://127.0.0.1:8000/health` にアクセスし `{"status":"ok"}` が返ればサーバー起動成功。
+
+6. **担当: 管理者 (初期 admin)・場所: ブラウザ**
+   - 既定の管理者でログイン: ユーザー名 `admin` / パスワード `admin123`。
+   - **確認:** 右上のナビゲーションに「ログイン中: System Admin (admin)」と表示されれば認証成功。
+
+7. **担当: 管理者・場所: ブラウザ**
+   - `/auth/register` から一般ユーザーを登録（例: username=`user1`, 氏名=`Taro User`, password=`pass123`）。
+   - **確認:** 登録後に「ユーザーを登録しました。」メッセージが出ること。
+
+8. **担当: 一般ユーザー・場所: ブラウザ**
+   - `/auth/login` で上記の一般ユーザーでログイン。
+   - トップページから申請を作成（申請者名は自動でログインユーザー名が入ります）。領収書画像を選択して送信。
+   - **確認:** 送信後 `/submissions?created=1` にリダイレクトされ、「申請を登録しました。」メッセージと新規行が表示されること。
+
+9. **担当: 承認者（任意のログインユーザー）・場所: ブラウザ**
+   - `/submissions` または `/approvals` の行/カードをクリックすると詳細ポップアップが表示されることを確認。右側に領収書画像、左側に申請情報と最新承認が並んでいること。
+   - `/approvals` で OK/NG とコメントを入力し「一括で保存」を押下。
+   - **確認:** 保存後の画面で最新承認欄に入力内容が反映されること。
 
 ## 使い方
 - **申請 (機能1)**: トップページから申請者（初期値 XYY）と領収書画像を選択して送信。OCR 抽出結果と画像パスが DB に保存されます。
