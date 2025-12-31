@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="narrow">
+    <h2>ユーザー登録（管理者用）</h2>
+    {% if created %}
+        <div class="alert success">ユーザーを登録しました。</div>
+    {% endif %}
+    {% if error %}
+        <div class="alert error">{{ error }}</div>
+    {% endif %}
+    <form action="/auth/register" method="post" class="card">
+        <label>ユーザー名</label>
+        <input type="text" name="username" required>
+
+        <label>氏名</label>
+        <input type="text" name="full_name" required>
+
+        <label>パスワード</label>
+        <input type="password" name="password" required>
+
+        <label>権限</label>
+        <select name="role">
+            <option value="user">一般ユーザー</option>
+            <option value="admin">管理者</option>
+        </select>
+
+        <button type="submit">登録する</button>
+    </form>
+</section>
+{% endblock %}
