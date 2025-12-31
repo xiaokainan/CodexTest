@@ -1,19 +1,23 @@
 import os
+import secrets
+import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from starlette.middleware.sessions import SessionMiddleware
 
-from .database import Base, engine, get_db
-from .models import Review, Submission
+from .database import Base, engine, get_db, SessionLocal
+from .models import Review, Submission, User
 from .services.ocr import extract_receipt_data
 
 app = FastAPI(title="Receipt Reviewer")
+app.add_middleware(SessionMiddleware, secret_key=os.getenv("SESSION_SECRET", secrets.token_hex(16)))
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -27,23 +31,67 @@ app.mount("/receipts", StaticFiles(directory=RECEIPT_DIR), name="receipts")
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 
 
+def hash_password(password: str, salt: str) -> str:
+    return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+
+
+def verify_password(password: str, salt: str, password_hash: str) -> bool:
+    return hash_password(password, salt) == password_hash
+
+
+def get_current_user(request: Request, db: Optional[Session]) -> Optional[User]:
+    user_id = request.session.get("user_id")
+    if not user_id or not db:
+        return None
+    return db.query(User).filter(User.id == user_id).first()
+
+
+def require_admin(user: Optional[User]) -> None:
+    if not user or user.role != "admin":
+        raise HTTPException(status_code=403, detail="管理者のみが利用できます")
+
+
+def seed_admin_user(db: Session) -> None:
+    if db.query(User).filter(User.username == "admin").first():
+        return
+    default_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
+    admin_user = User(
+        username="admin",
+        full_name="System Admin",
+        role="admin",
+        password_hash=hash_password(default_password, "admin"),
+    )
+    db.add(admin_user)
+    db.commit()
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        seed_admin_user(db)
 
 
 @app.get("/", response_class=HTMLResponse)
 def upload_form(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("upload.html", {"request": request, "default_applicant": "XYY"})
+    user = get_current_user(request, None)
+    return templates.TemplateResponse(
+        "upload.html",
+        {"request": request, "default_applicant": user.full_name if user else "XYY", "user": user},
+    )
 
 
 @app.post("/submissions")
 async def create_submission(
     request: Request,
-    applicant: str = Form("XYY"),
+    applicant: str = Form(""),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="ログインしてください")
+
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file uploaded")
 
@@ -52,7 +100,9 @@ async def create_submission(
     public_path = Path("receipts") / saved_path.name
 
     submission = Submission(
-        applicant=applicant or "XYY",
+        applicant=applicant or user.full_name or "XYY",
+        applicant_login=user.username,
+        user_id=user.id,
         date=extracted.get("date"),
         recipient=extracted.get("recipient"),
         amount=extracted.get("amount"),
@@ -77,6 +127,7 @@ def list_submissions(request: Request, created: int | None = None, db: Session =
             "request": request,
             "submissions": submissions,
             "created": created,
+            "user": get_current_user(request, db),
         },
     )
 
@@ -98,6 +149,7 @@ def approvals_view(request: Request, db: Session = Depends(get_db)) -> HTMLRespo
             "request": request,
             "submissions": submissions,
             "latest_reviews": latest_reviews,
+            "user": get_current_user(request, db),
         },
     )
 
@@ -137,6 +189,84 @@ async def approve_bulk(
 
     response = RedirectResponse(url="/approvals?saved=1", status_code=303)
     return response
+
+
+@app.get("/submissions/{submission_id}", response_class=HTMLResponse)
+def submission_detail(submission_id: int, request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    submission = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not submission:
+        raise HTTPException(status_code=404, detail="申請が見つかりません")
+    latest_review = (
+        db.query(Review)
+        .filter(Review.submission_id == submission.id)
+        .order_by(Review.created_at.desc())
+        .first()
+    )
+    return templates.TemplateResponse(
+        "submission_detail.html",
+        {"request": request, "submission": submission, "latest_review": latest_review, "user": get_current_user(request, db)},
+    )
+
+
+@app.get("/auth/login", response_class=HTMLResponse)
+def login_form(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+
+
+@app.post("/auth/login")
+async def login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)) -> RedirectResponse:
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not verify_password(password, user.username, user.password_hash):
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "ユーザー名またはパスワードが正しくありません"},
+            status_code=401,
+        )
+    request.session["user_id"] = user.id
+    request.session["username"] = user.username
+    request.session["full_name"] = user.full_name
+    request.session["role"] = user.role
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/auth/logout")
+async def logout(request: Request) -> RedirectResponse:
+    request.session.clear()
+    return RedirectResponse(url="/", status_code=303)
+
+
+@app.get("/auth/register", response_class=HTMLResponse)
+def register_form(request: Request, created: int | None = None, db: Session = Depends(get_db)) -> HTMLResponse:
+    user = get_current_user(request, db)
+    require_admin(user)
+    return templates.TemplateResponse(
+        "register.html", {"request": request, "error": None, "user": user, "created": created}
+    )
+
+
+@app.post("/auth/register")
+async def register_user(
+    request: Request,
+    username: str = Form(...),
+    full_name: str = Form(...),
+    password: str = Form(...),
+    role: str = Form("user"),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    current_user = get_current_user(request, db)
+    require_admin(current_user)
+
+    if db.query(User).filter(User.username == username).first():
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "error": "同じユーザー名が既に存在します", "user": current_user},
+            status_code=400,
+        )
+    password_hash = hash_password(password, username)
+    new_user = User(username=username, full_name=full_name, password_hash=password_hash, role=role)
+    db.add(new_user)
+    db.commit()
+    return RedirectResponse(url="/auth/register?created=1", status_code=303)
 
 
 def save_upload(file: UploadFile) -> Path:
