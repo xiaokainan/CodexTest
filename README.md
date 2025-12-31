@@ -2,10 +2,14 @@
 
 ローカル環境（Windows 11 向け想定）で領収書画像を OCR し、抽出結果を保存・一覧・承認できる簡易 Web アプリです。ログイン/申請/承認/ログアウトの操作ログを `data/logs/app.log` に記録します。
 
-## 機能
+## 機能 (AllLink_V0.4)
+AllLink_V0.4 で提供する主な機能は以下のとおりです。
+
 1. **申請登録**: 領収書画像をアップロードすると、日付/宛先/金額/登録番号を OCR で抽出し、申請者（初期値 XYY）、画像パスと一緒に SQLite DB へ保存。
 2. **申請一覧**: これまでの申請をテーブルで表示。画像へのリンク付き。
 3. **承認画面**: 申請ごとに領収書と抽出値を突合し、OK/NG とコメントを一括保存。最新の承認履歴を確認可能。
+4. **ユーザー管理**: 管理者によるユーザー登録、権限（admin/user）管理、ログイン/ログアウト。
+5. **監査ログ**: ログイン/ログアウト/申請/承認などの操作ログを `data/logs/app.log` に記録。
 
 ## セットアップ (Windows 11, PowerShell)
 以下は「誰がどこで何をどうやって実行し、成功をどう確認するか」を明示した手順です。
@@ -62,7 +66,49 @@
 7. **データの場所**
    - DB: `data/app.db` (SQLite)
    - 領収書画像: `data/receipts/`
-   - 操作ログ: `data/logs/app.log`
+- 操作ログ: `data/logs/app.log`
+
+## Windows 11 で WSL (Ubuntu) を用いた隔離環境構築
+Windows 本体への影響を避けたい場合は、WSL 上の Ubuntu に AllLink_V0.4 をセットアップしてください。以下は PowerShell からの手順です。
+
+### 0. 事前確認
+- PowerShell を「管理者として実行」する。
+- 初回の WSL インストール後は PC の再起動と Linux ユーザー作成が必要。
+
+### 1. WSL/Ubuntu をインストール
+```powershell
+wsl --install -d Ubuntu
+```
+- 再起動後に Ubuntu を開き、求められたら Linux ユーザー名とパスワードを作成。
+
+### 2. Ubuntu 内で依存関係を導入
+```powershell
+wsl -d Ubuntu -- sudo apt-get update -y
+wsl -d Ubuntu -- sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git tesseract-ocr tesseract-ocr-jpn libtesseract-dev
+```
+
+### 3. ソース取得と仮想環境
+```powershell
+wsl -d Ubuntu -- git clone https://github.com/xiaokainan/CodexTest.git ~/AllLink_V0_4
+wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_4 && python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt && mkdir -p data/logs data/receipts"
+```
+
+### 4. アプリを起動
+```powershell
+wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_4 && . .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+```
+- ブラウザで `http://localhost:8000/` を開けば WSL 上のアプリにアクセス可能。
+
+### 5. 自動化バッチ (推奨)
+ルートにある `setup_wsl_alllink.bat` を管理者権限の PowerShell から実行すると、次を自動化します:
+
+- WSL および Ubuntu の有無を確認し、未導入なら `wsl --install -d Ubuntu` でセットアップ（再起動が必要な場合あり）。
+- Ubuntu 内で Python/Tesseract/git などをインストール。
+- リポジトリの clone または git pull。
+- 仮想環境 `.venv` の作成と依存関係のインストール。
+- データディレクトリ (`data/logs`, `data/receipts`) の作成。
+
+再起動が必要になった場合は、再起動後にもう一度バッチを実行してください。起動は手順 4 と同じコマンドで行えます。
 
 ## 使い方
 - **申請 (機能1)**: トップページから申請者（初期値 XYY）と領収書画像を選択して送信。OCR 抽出結果と画像パスが DB に保存されます。
