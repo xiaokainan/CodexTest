@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="section-header">
+    <div>
+        <p class="eyebrow">{{ flow.category or 'フロー' }}</p>
+        <h2>{{ flow.name }} の申請一覧</h2>
+        <p class="muted">承認ルート: {% if flow.steps %}{% for step in flow.steps %}Step {{ step.order }} {{ step.name }}{% if not loop.last %} → {% endif %}{% endfor %}{% else %}未設定{% endif %}</p>
+    </div>
+    <div class="actions">
+        <a class="button ghost" href="/flows">フロー一覧</a>
+        <a class="button ghost" href="/flows/{{ flow.id }}/approvals">承認画面</a>
+        <a class="button" href="/flows/{{ flow.id }}/requests/new">新規申請</a>
+    </div>
+</div>
+
+{% if created %}
+    <div class="alert success">申請を登録しました。</div>
+{% endif %}
+
+{% if flow_requests|length == 0 %}
+    <div class="alert info">まだ申請がありません。右上の「新規申請」から登録してください。</div>
+{% else %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>件名</th>
+                <th>申請者</th>
+                <th>状態</th>
+                <th>最終更新</th>
+                <th>直近の承認</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in flow_requests %}
+                <tr>
+                    <td>{{ item.id }}</td>
+                    <td>{{ item.title }}</td>
+                    <td>{{ item.applicant }}<br><span class="muted small">{{ item.applicant_login }}</span></td>
+                    <td><span class="status {{ item.status }}">{{ item.status }}</span></td>
+                    <td>{{ item.updated_at.strftime('%Y-%m-%d %H:%M') if item.updated_at else '-' }}</td>
+                    <td>
+                        {% set latest = latest_approvals.get(item.id) %}
+                        {% if latest %}
+                            <div>{{ latest.decision }} ({{ latest.step_name or 'ルート未指定' }})</div>
+                            <div class="muted small">{{ latest.actor }} / {{ latest.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                        {% else %}
+                            <span class="muted">承認履歴なし</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endif %}
+{% endblock %}

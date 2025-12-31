@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="section-header">
+    <div>
+        <p class="eyebrow">{{ flow.category or 'フロー' }}</p>
+        <h2>{{ flow.name }} への新規申請</h2>
+        <p class="muted">申請者: {{ user.full_name }} ({{ user.username }})</p>
+    </div>
+    <div class="actions">
+        <a class="button ghost" href="/flows/{{ flow.id }}/requests">申請一覧に戻る</a>
+    </div>
+</div>
+
+<form action="/flows/{{ flow.id }}/requests" method="post" class="card">
+    <label for="title">件名</label>
+    <input type="text" id="title" name="title" placeholder="例: 新入社員のメールアドレス発行" required>
+
+    <label for="description">詳細 (オプション)</label>
+    <textarea id="description" name="description" rows="6" placeholder="目的、必要なアカウント権限、希望日時などを入力してください。"></textarea>
+
+    <div class="actions end">
+        <a class="button ghost" href="/flows/{{ flow.id }}/requests">キャンセル</a>
+        <button type="submit">登録する</button>
+    </div>
+</form>
+{% endblock %}

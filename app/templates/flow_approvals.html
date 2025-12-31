@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="section-header">
+    <div>
+        <p class="eyebrow">{{ flow.category or 'フロー' }}</p>
+        <h2>{{ flow.name }} の承認</h2>
+        <p class="muted">承認ルート: {% if flow.steps %}{% for step in flow.steps %}Step {{ step.order }} {{ step.name }}{% if not loop.last %} → {% endif %}{% endfor %}{% else %}未設定{% endif %}</p>
+    </div>
+    <div class="actions">
+        <a class="button ghost" href="/flows">フロー一覧</a>
+        <a class="button ghost" href="/flows/{{ flow.id }}/requests">申請一覧</a>
+    </div>
+</div>
+
+{% if saved %}
+    <div class="alert success">承認結果を保存しました。</div>
+{% endif %}
+
+{% if flow_requests|length == 0 %}
+    <div class="alert info">このフローに紐づく申請はまだありません。</div>
+{% else %}
+    <form method="post" action="/flows/{{ flow.id }}/approvals" class="stack">
+        <div class="form-row">
+            <label for="reviewer">承認者名</label>
+            <input type="text" id="reviewer" name="reviewer" value="{{ user.full_name or user.username }}">
+        </div>
+        <div class="grid">
+            {% for item in flow_requests %}
+                <article class="card">
+                    <div class="flex-between">
+                        <div>
+                            <p class="eyebrow">ID: {{ item.id }}</p>
+                            <h4>{{ item.title }}</h4>
+                            <p class="muted small">申請者: {{ item.applicant }} ({{ item.applicant_login }}) / {{ item.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                        </div>
+                        <span class="status {{ item.status }}">{{ item.status }}</span>
+                    </div>
+                    {% if item.description %}
+                        <p>{{ item.description }}</p>
+                    {% endif %}
+
+                    {% set approvals = approvals_by_request.get(item.id, []) %}
+                    {% if approvals %}
+                        <div class="approval-history">
+                            <div class="muted small">履歴</div>
+                            {% for approval in approvals %}
+                                <div class="history-row">
+                                    <span class="chip">{{ approval.step_name or 'ステップ未指定' }}</span>
+                                    <span class="status {{ approval.decision }}">{{ approval.decision }}</span>
+                                    <span class="muted small">{{ approval.actor }} / {{ approval.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                                    {% if approval.comment %}
+                                        <div class="muted small">コメント: {{ approval.comment }}</div>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    <div class="form-row inline">
+                        <label>ルート</label>
+                        <select name="step_{{ item.id }}">
+                            {% set suggested = next_steps.get(item.id) %}
+                            {% for step in flow.steps %}
+                                <option value="{{ step.name }}" {% if suggested and suggested.id == step.id %}selected{% endif %}>Step {{ step.order }}: {{ step.name }}</option>
+                            {% endfor %}
+                            {% if not flow.steps %}
+                                <option value="">(ルート未設定)</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="form-row inline">
+                        <label>判定</label>
+                        <label><input type="radio" name="status_{{ item.id }}" value="approved"> 承認</label>
+                        <label><input type="radio" name="status_{{ item.id }}" value="rejected"> 否認</label>
+                    </div>
+                    <label for="comment_{{ item.id }}">コメント</label>
+                    <textarea id="comment_{{ item.id }}" name="comment_{{ item.id }}" rows="3" placeholder="補足メモを残す場合はこちら"></textarea>
+                </article>
+            {% endfor %}
+        </div>
+        <div class="actions end">
+            <button type="submit">まとめて保存</button>
+        </div>
+    </form>
+{% endif %}
+{% endblock %}

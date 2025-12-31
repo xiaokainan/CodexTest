@@ -1,15 +1,17 @@
-# 領収書 OCR 審査サンプル (CodexTest)
+# 領収書 OCR 審査サンプル (CodexTest / AllLink)
 
-ローカル環境（Windows 11 向け想定）で領収書画像を OCR し、抽出結果を保存・一覧・承認できる簡易 Web アプリです。ログイン/申請/承認/ログアウトの操作ログを `data/logs/app.log` に記録します。
+ローカル環境（Windows 11/WSL(Ubuntu) 向け想定）で領収書画像を OCR し、抽出結果を保存・一覧・承認できる Web アプリです。2024/11 以降は社内ワークフロー統合ツール **AllLink** として、メール・PC・各種アカウント申請などの汎用フローも GUI で作成・承認できます。ログイン/申請/承認/ログアウトの操作ログを `data/logs/app.log` に記録します。
 
-## 機能 (AllLink_V0.4)
-AllLink_V0.4 で提供する主な機能は以下のとおりです。
+## 機能 (AllLink_V0.5)
+AllLink_V0.5 で提供する主な機能は以下のとおりです。
 
-1. **申請登録**: 領収書画像をアップロードすると、日付/宛先/金額/登録番号を OCR で抽出し、申請者（初期値 XYY）、画像パスと一緒に SQLite DB へ保存。
+1. **申請登録（財務会計フロー）**: 領収書画像をアップロードすると、日付/宛先/金額/登録番号を OCR で抽出し、申請者（初期値 XYY）、画像パスと一緒に SQLite DB へ保存。
 2. **申請一覧**: これまでの申請をテーブルで表示。画像へのリンク付き。
 3. **承認画面**: 申請ごとに領収書と抽出値を突合し、OK/NG とコメントを一括保存。最新の承認履歴を確認可能。
 4. **ユーザー管理**: 管理者によるユーザー登録、権限（admin/user）管理、ログイン/ログアウト。
 5. **監査ログ**: ログイン/ログアウト/申請/承認などの操作ログを `data/logs/app.log` に記録。
+6. **社内フロー作成 (AllLink)**: `/flows` で GUI ベースのフロー作成・承認ルート設定が可能。財務会計フローに加え、メールアドレス・PC・iPad・社内システムアカウントなど任意のフローを追加。
+7. **フロー別申請・承認**: フロー単位で申請登録、申請一覧、承認画面を用意し、登録データをフローごとに分離して表示。
 
 ## セットアップ (Windows 11, PowerShell)
 以下は「誰がどこで何をどうやって実行し、成功をどう確認するか」を明示した手順です。
@@ -69,7 +71,7 @@ AllLink_V0.4 で提供する主な機能は以下のとおりです。
 - 操作ログ: `data/logs/app.log`
 
 ## Windows 11 で WSL (Ubuntu) を用いた隔離環境構築
-Windows 本体への影響を避けたい場合は、WSL 上の Ubuntu に AllLink_V0.4 をセットアップしてください。以下は PowerShell からの手順です。
+Windows 本体への影響を避けたい場合は、WSL 上の Ubuntu に AllLink_V0.5 をセットアップしてください。以下は PowerShell からの手順です。
 
 ### 0. 事前確認
 - PowerShell を「管理者として実行」する。
@@ -89,13 +91,13 @@ wsl -d Ubuntu -- sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 
 
 ### 3. ソース取得と仮想環境
 ```powershell
-wsl -d Ubuntu -- git clone https://github.com/xiaokainan/CodexTest.git ~/AllLink_V0_4
-wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_4 && python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt && mkdir -p data/logs data/receipts"
+wsl -d Ubuntu -- git clone https://github.com/xiaokainan/CodexTest.git ~/AllLink_V0_5
+wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_5 && python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt && mkdir -p data/logs data/receipts"
 ```
 
 ### 4. アプリを起動
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_4 && . .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_5 && . .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 ```
 - ブラウザで `http://localhost:8000/` を開けば WSL 上のアプリにアクセス可能。
 
@@ -114,6 +116,7 @@ wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_4 && . .venv/bin/activate && uvicorn 
 - **申請 (機能1)**: トップページから申請者（初期値 XYY）と領収書画像を選択して送信。OCR 抽出結果と画像パスが DB に保存されます。
 - **一覧 (機能2)**: `/submissions` で申請履歴を確認。画像は `/receipts/...` から直接参照可能。
 - **承認 (機能3)**: `/approvals` で各申請の画像と抽出値を確認し、OK/NG とコメントを入力して一括保存。最新の承認結果がカード下部に表示されます。
+- **汎用フロー (機能6-7)**: `/flows` で新規フローを作成し、ステップごとの承認ルートを GUI で設定。各フローに対し「申請一覧」「承認」「新規申請」画面が自動生成されます。
 
 ## 補足
 - データは `data/app.db` (SQLite) に保存されます。領収書画像は `data/receipts/` 配下へ保存されます。

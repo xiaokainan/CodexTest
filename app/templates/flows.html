@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="section-header">
+    <div>
+        <p class="eyebrow">AllLink</p>
+        <h2>フロー管理 (Ubuntu on Windows 11 / WSL 対応)</h2>
+        <p class="muted">財務会計の既存フローを起点に、メール・PC・iPad・各種アカウント申請など社内承認を一元管理できます。</p>
+    </div>
+    <div class="actions">
+        <a class="button ghost" href="/">財務会計フローへ戻る</a>
+    </div>
+</div>
+
+{% if error %}
+    <div class="alert">{{ error }}</div>
+{% elif created %}
+    <div class="alert success">新しいフローを作成しました。</div>
+{% endif %}
+
+<div class="layout-two">
+    <section class="card">
+        <div class="card-header">フロー作成 (GUI)</div>
+        {% if user and user.role == 'admin' %}
+            <form method="post" action="/flows">
+                <label for="name">フロー名</label>
+                <input type="text" id="name" name="name" placeholder="例: メールアドレス申請" required>
+
+                <div class="form-row two-cols">
+                    <div>
+                        <label for="category">カテゴリ</label>
+                        <input type="text" id="category" name="category" placeholder="IT / 情報システム / コーポレート など">
+                    </div>
+                    <div>
+                        <label for="route_steps">承認ルート (1 行 1 ステップ)</label>
+                        <textarea id="route_steps" name="route_steps" rows="5" placeholder="1行ごとに承認ステップを入力&#10;例) 担当者&#10;例) 部長&#10;例) システム管理者"></textarea>
+                    </div>
+                </div>
+
+                <label for="description">説明</label>
+                <textarea id="description" name="description" rows="3" placeholder="フローの目的や対象範囲を入力"></textarea>
+
+                <div class="actions end">
+                    <button type="submit">フローを追加</button>
+                </div>
+            </form>
+        {% else %}
+            <p>新規フロー作成は管理者専用です。管理者アカウントでログインしてください。</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <div class="card-header">使い方のヒント</div>
+        <ul>
+            <li>「財務会計 (領収書OCR)」は既存の領収書申請フローとして登録済みです。</li>
+            <li>メールアドレス/PC/iPad/社内システムアカウントなど、用途別にフローを作成できます。</li>
+            <li>承認ルートは GUI で設定し、申請一覧や承認画面をフロー単位で分けられます。</li>
+        </ul>
+    </section>
+</div>
+
+<div class="section-header">
+    <h3>登録済みフロー</h3>
+    <p class="muted">全フローを AllLink 上で統合管理します。</p>
+</div>
+
+{% if flows|length == 0 %}
+    <div class="alert info">まだフローがありません。まずは新しいフローを追加してください。</div>
+{% else %}
+    <div class="grid">
+        {% for item in flows %}
+            {% set flow = item.flow %}
+            <article class="card">
+                <div class="flex-between">
+                    <div>
+                        <p class="eyebrow">{{ flow.category or '未設定' }}</p>
+                        <h4>{{ flow.name }}</h4>
+                    </div>
+                    <span class="tag">{{ item.request_count }} 件の申請</span>
+                </div>
+                <p class="muted">{{ flow.description or '説明は登録されていません。' }}</p>
+                {% if flow.steps %}
+                    <div class="chips">
+                        {% for step in flow.steps %}
+                            <span class="chip">Step {{ step.order }}: {{ step.name }}</span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="muted">承認ルートは未設定です。</p>
+                {% endif %}
+                <div class="actions">
+                    <a class="button ghost" href="/flows/{{ flow.id }}/requests">申請一覧</a>
+                    <a class="button ghost" href="/flows/{{ flow.id }}/approvals">承認</a>
+                    <a class="button" href="/flows/{{ flow.id }}/requests/new">新規申請</a>
+                </div>
+                {% if flow.name.startswith('財務会計') %}
+                    <p class="muted small">既存の領収書 OCR 画面 (/ /approvals) と併用できます。</p>
+                {% endif %}
+            </article>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endblock %}

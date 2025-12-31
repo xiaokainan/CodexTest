@@ -27,6 +27,16 @@ nav a {
     color: var(--primary);
     text-decoration: none;
 }
+a.button {
+    border: 1px solid var(--primary);
+    padding: 8px 12px;
+    border-radius: 6px;
+    color: var(--primary);
+    font-weight: 700;
+}
+a.button.ghost {
+    background: #f2f6ff;
+}
 h1 {
     margin: 0 0 8px 0;
 }
@@ -116,3 +126,70 @@ textarea { resize: vertical; }
 .narrow {
     max-width: 520px;
 }
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+.eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    color: #6b7280;
+    margin: 0 0 4px 0;
+}
+.muted {
+    color: #6b7280;
+}
+.muted.small { font-size: 12px; }
+.actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.actions.end { justify-content: flex-end; }
+.tag {
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    color: #4338ca;
+    border-radius: 999px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+.chip {
+    display: inline-block;
+    background: #f4f4f5;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    padding: 4px 8px;
+    margin: 2px 4px 2px 0;
+    font-size: 12px;
+}
+.chips { margin: 8px 0; }
+.status {
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    text-transform: capitalize;
+    border: 1px solid var(--border);
+}
+.status.pending { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
+.status.approved { background: #ecfdf3; border-color: #bbf7d0; color: #15803d; }
+.status.rejected { background: #fef2f2; border-color: #fecdd3; color: #b91c1c; }
+.status.in_progress { background: #e0f2fe; border-color: #bae6fd; color: #0369a1; }
+.stack > * + * { margin-top: 12px; }
+.layout-two {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.form-row.two-cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+}
+.approval-history { border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 12px; }
+.history-row { display: grid; grid-template-columns: auto auto 1fr; gap: 8px; align-items: center; }

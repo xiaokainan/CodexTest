@@ -5,7 +5,7 @@ import secrets
 import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 
 from .database import Base, engine, get_db, SessionLocal
-from .models import Review, Submission, User
+from .models import Flow, FlowRequest, FlowRequestApproval, FlowStep, Review, Submission, User
 from .services.ocr import extract_receipt_data
 
 app = FastAPI(title="Receipt Reviewer")
@@ -101,11 +101,50 @@ def seed_admin_user(db: Session) -> None:
     db.commit()
 
 
+def seed_default_flow(db: Session) -> Flow:
+    existing = db.query(Flow).filter(Flow.name == "財務会計 (領収書OCR)").first()
+    if existing:
+        return existing
+    flow = Flow(
+        name="財務会計 (領収書OCR)",
+        category="財務会計",
+        description="既存の領収書 OCR 申請/承認フローを表すデフォルトフローです。",
+    )
+    db.add(flow)
+    db.commit()
+    db.refresh(flow)
+
+    default_steps = ["申請者", "経理担当", "管理者"]
+    for idx, step_name in enumerate(default_steps, start=1):
+        step = FlowStep(flow_id=flow.id, name=step_name, approver_role="財務", order=idx)
+        db.add(step)
+    db.commit()
+    return flow
+
+
+def get_flow_or_404(flow_id: int, db: Session) -> Flow:
+    flow = db.query(Flow).filter(Flow.id == flow_id).first()
+    if not flow:
+        raise HTTPException(status_code=404, detail="フローが見つかりません")
+    return flow
+
+
+def get_next_step(flow: Flow, approvals: List[FlowRequestApproval]) -> Optional[FlowStep]:
+    if not flow.steps:
+        return None
+    taken_orders = {approval.step_order for approval in approvals if approval.step_order is not None}
+    for step in flow.steps:
+        if step.order not in taken_orders:
+            return step
+    return None
+
+
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_admin_user(db)
+        seed_default_flow(db)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -326,6 +365,257 @@ async def register_user(
         created_role=role,
     )
     return RedirectResponse(url="/auth/register?created=1", status_code=303)
+
+
+@app.get("/flows", response_class=HTMLResponse)
+def list_flows(request: Request, created: int | None = None, db: Session = Depends(get_db)) -> HTMLResponse:
+    user = get_current_user(request, db)
+    flows = db.query(Flow).order_by(Flow.created_at.desc()).all()
+    flow_summaries = []
+    for flow in flows:
+        request_count = db.query(FlowRequest).filter(FlowRequest.flow_id == flow.id).count()
+        flow_summaries.append({"flow": flow, "request_count": request_count})
+    return templates.TemplateResponse(
+        "flows.html",
+        {"request": request, "flows": flow_summaries, "user": user, "created": created},
+    )
+
+
+@app.post("/flows")
+async def create_flow(
+    request: Request,
+    name: str = Form(...),
+    category: str = Form(""),
+    description: str = Form(""),
+    route_steps: str = Form(""),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    user = get_current_user(request, db)
+    require_admin(user)
+    if db.query(Flow).filter(Flow.name == name.strip()).first():
+        flows = db.query(Flow).order_by(Flow.created_at.desc()).all()
+        flow_summaries = []
+        for flow in flows:
+            request_count = db.query(FlowRequest).filter(FlowRequest.flow_id == flow.id).count()
+            flow_summaries.append({"flow": flow, "request_count": request_count})
+        return templates.TemplateResponse(
+            "flows.html",
+            {
+                "request": request,
+                "flows": flow_summaries,
+                "user": user,
+                "created": None,
+                "error": "同じ名前のフローが既に存在します。",
+            },
+            status_code=400,
+        )
+    flow = Flow(name=name.strip(), category=category.strip() or None, description=description.strip() or None)
+    db.add(flow)
+    db.commit()
+    db.refresh(flow)
+
+    steps = [line.strip() for line in route_steps.splitlines() if line.strip()]
+    for idx, step_name in enumerate(steps, start=1):
+        step = FlowStep(flow_id=flow.id, name=step_name, approver_role=None, order=idx)
+        db.add(step)
+    db.commit()
+
+    log_action("flow_created", request, user, flow_id=flow.id, name=flow.name, steps=len(steps))
+    return RedirectResponse(url="/flows?created=1", status_code=303)
+
+
+@app.get("/flows/{flow_id}/requests", response_class=HTMLResponse)
+def view_flow_requests(flow_id: int, request: Request, created: int | None = None, db: Session = Depends(get_db)) -> HTMLResponse:
+    flow = get_flow_or_404(flow_id, db)
+    user = get_current_user(request, db)
+    requests = (
+        db.query(FlowRequest)
+        .filter(FlowRequest.flow_id == flow.id)
+        .order_by(FlowRequest.created_at.desc())
+        .all()
+    )
+    latest_approvals: Dict[int, FlowRequestApproval | None] = {}
+    for record in requests:
+        latest_approvals[record.id] = (
+            db.query(FlowRequestApproval)
+            .filter(FlowRequestApproval.request_id == record.id)
+            .order_by(FlowRequestApproval.created_at.desc())
+            .first()
+        )
+
+    return templates.TemplateResponse(
+        "flow_requests.html",
+        {
+            "request": request,
+            "flow": flow,
+            "flow_requests": requests,
+            "latest_approvals": latest_approvals,
+            "user": user,
+            "created": created,
+        },
+    )
+
+
+@app.get("/flows/{flow_id}/requests/new", response_class=HTMLResponse)
+def new_flow_request_form(flow_id: int, request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    flow = get_flow_or_404(flow_id, db)
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="ログインしてください")
+    return templates.TemplateResponse(
+        "flow_request_form.html",
+        {
+            "request": request,
+            "flow": flow,
+            "user": user,
+        },
+    )
+
+
+@app.post("/flows/{flow_id}/requests")
+async def create_flow_request(
+    flow_id: int,
+    request: Request,
+    title: str = Form(...),
+    description: str = Form(""),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    flow = get_flow_or_404(flow_id, db)
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="ログインしてください")
+    flow_request = FlowRequest(
+        flow_id=flow.id,
+        title=title.strip(),
+        description=description.strip() or None,
+        applicant=user.full_name or user.username,
+        applicant_login=user.username,
+        status="pending",
+    )
+    db.add(flow_request)
+    db.commit()
+    db.refresh(flow_request)
+
+    log_action(
+        "flow_request_created",
+        request,
+        user,
+        flow_id=flow.id,
+        request_id=flow_request.id,
+        title=flow_request.title,
+    )
+    return RedirectResponse(url=f"/flows/{flow.id}/requests?created=1", status_code=303)
+
+
+@app.get("/flows/{flow_id}/approvals", response_class=HTMLResponse)
+def view_flow_approvals(
+    flow_id: int, request: Request, saved: int | None = None, db: Session = Depends(get_db)
+) -> HTMLResponse:
+    flow = get_flow_or_404(flow_id, db)
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="ログインしてください")
+    flow_requests = (
+        db.query(FlowRequest)
+        .filter(FlowRequest.flow_id == flow.id)
+        .order_by(FlowRequest.created_at.desc())
+        .all()
+    )
+    approvals_by_request: Dict[int, List[FlowRequestApproval]] = {}
+    next_steps: Dict[int, Optional[FlowStep]] = {}
+    for record in flow_requests:
+        approvals = (
+            db.query(FlowRequestApproval)
+            .filter(FlowRequestApproval.request_id == record.id)
+            .order_by(FlowRequestApproval.created_at.desc())
+            .all()
+        )
+        approvals_by_request[record.id] = approvals
+        next_steps[record.id] = get_next_step(flow, approvals)
+
+    return templates.TemplateResponse(
+        "flow_approvals.html",
+        {
+            "request": request,
+            "flow": flow,
+            "flow_requests": flow_requests,
+            "approvals_by_request": approvals_by_request,
+            "next_steps": next_steps,
+            "user": user,
+            "saved": saved,
+        },
+    )
+
+
+@app.post("/flows/{flow_id}/approvals")
+async def submit_flow_approvals(
+    flow_id: int,
+    request: Request,
+    reviewer: str = Form(""),
+    db: Session = Depends(get_db),
+) -> RedirectResponse:
+    flow = get_flow_or_404(flow_id, db)
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="ログインしてください")
+
+    form = await request.form()
+    actions: Dict[int, Dict[str, Any]] = {}
+    for key, value in form.items():
+        if key.startswith("status_"):
+            request_id = int(key.split("_")[1])
+            actions[request_id] = {"status": value}
+        if key.startswith("comment_"):
+            request_id = int(key.split("_")[1])
+            actions.setdefault(request_id, {})["comment"] = value
+        if key.startswith("step_"):
+            request_id = int(key.split("_")[1])
+            actions.setdefault(request_id, {})["step"] = value
+
+    for request_id, payload in actions.items():
+        status = payload.get("status")
+        comment = payload.get("comment", "")
+        step_name = payload.get("step") or None
+        if status not in {"approved", "rejected"}:
+            continue
+
+        flow_request = (
+            db.query(FlowRequest)
+            .filter(FlowRequest.id == request_id, FlowRequest.flow_id == flow.id)
+            .first()
+        )
+        if not flow_request:
+            continue
+        step_order = None
+        if step_name:
+            step = (
+                db.query(FlowStep)
+                .filter(FlowStep.flow_id == flow.id, FlowStep.name == step_name)
+                .order_by(FlowStep.order.asc())
+                .first()
+            )
+            step_order = step.order if step else None
+        approval = FlowRequestApproval(
+            request_id=flow_request.id,
+            step_name=step_name,
+            step_order=step_order,
+            actor=reviewer or (user.full_name or user.username),
+            decision=status,
+            comment=comment,
+        )
+        db.add(approval)
+        flow_request.status = "approved" if status == "approved" else "rejected"
+
+    db.commit()
+    log_action(
+        "flow_approval_recorded",
+        request,
+        user,
+        flow_id=flow.id,
+        actions=list(actions.keys()),
+        reviewer=reviewer or user.username,
+    )
+    return RedirectResponse(url=f"/flows/{flow.id}/approvals?saved=1", status_code=303)
 
 
 def save_upload(file: UploadFile) -> Path:

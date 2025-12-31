@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>領収書審査システム</title>
+    <title>AllLink フロー管理</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
 <header>
     <div class="container">
-        <h1>領収書審査システム</h1>
+        <h1>AllLink 承認ポータル</h1>
         <nav>
             <a href="/">アップロード</a>
             <a href="/submissions">申請一覧</a>
             <a href="/approvals">承認</a>
+            <a href="/flows">フロー管理</a>
             <span class="nav-actions">
                 {% if user %}
                     <span>ログイン中: {{ user.full_name }} ({{ user.role }})</span>

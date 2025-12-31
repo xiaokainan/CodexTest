@@ -5,6 +5,63 @@ from sqlalchemy.orm import relationship
 from .database import Base
 
 
+class Flow(Base):
+    __tablename__ = "flows"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(150), unique=True, nullable=False)
+    category = Column(String(100), nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    steps = relationship("FlowStep", back_populates="flow", cascade="all, delete-orphan", order_by="FlowStep.order")
+    requests = relationship("FlowRequest", back_populates="flow", cascade="all, delete-orphan")
+
+
+class FlowStep(Base):
+    __tablename__ = "flow_steps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    flow_id = Column(Integer, ForeignKey("flows.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(150), nullable=False)
+    approver_role = Column(String(150), nullable=True)
+    order = Column(Integer, nullable=False, default=1)
+
+    flow = relationship("Flow", back_populates="steps")
+
+
+class FlowRequest(Base):
+    __tablename__ = "flow_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    flow_id = Column(Integer, ForeignKey("flows.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    applicant = Column(String(150), nullable=False)
+    applicant_login = Column(String(100), nullable=True)
+    status = Column(String(50), nullable=False, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    flow = relationship("Flow", back_populates="requests")
+    approvals = relationship("FlowRequestApproval", back_populates="request", cascade="all, delete-orphan")
+
+
+class FlowRequestApproval(Base):
+    __tablename__ = "flow_request_approvals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    request_id = Column(Integer, ForeignKey("flow_requests.id", ondelete="CASCADE"), nullable=False)
+    step_name = Column(String(150), nullable=True)
+    step_order = Column(Integer, nullable=True)
+    actor = Column(String(150), nullable=False)
+    decision = Column(String(50), nullable=False)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    request = relationship("FlowRequest", back_populates="approvals")
+
+
 class User(Base):
     __tablename__ = "users"
 
