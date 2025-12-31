@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>申請詳細</h2>
+    <div class="detail-layout">
+        <div class="detail-info">
+            <p><strong>申請ID:</strong> {{ submission.id }}</p>
+            <p><strong>申請者:</strong> {{ submission.applicant }}</p>
+            <p><strong>ログインID:</strong> {{ submission.applicant_login or '-' }}</p>
+            <p><strong>日付:</strong> {{ submission.date or '-' }}</p>
+            <p><strong>宛先:</strong> {{ submission.recipient or '-' }}</p>
+            <p><strong>金額:</strong> {{ submission.amount or '-' }}</p>
+            <p><strong>登録番号:</strong> {{ submission.registration_number or '-' }}</p>
+            <p><strong>申請日時:</strong> {{ submission.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+            {% if latest_review %}
+                <div class="alert info">
+                    最新承認: {{ latest_review.status }} / {{ latest_review.reviewer }} / {{ latest_review.created_at.strftime('%Y-%m-%d %H:%M') }}<br>
+                    {% if latest_review.note %}コメント: {{ latest_review.note }}{% endif %}
+                </div>
+            {% endif %}
+        </div>
+        <div class="detail-image">
+            <img src="/{{ submission.image_path }}" alt="receipt image">
+        </div>
+    </div>
+</section>
+{% endblock %}

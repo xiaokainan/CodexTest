@@ -13,7 +13,7 @@
         {% else %}
             <div class="grid">
                 {% for submission in submissions %}
-                <div class="card">
+                <div class="card clickable-row" data-detail="/submissions/{{ submission.id }}">
                     <div class="card-header">
                         <strong>ID {{ submission.id }}</strong> / {{ submission.applicant }} / {{ submission.created_at.strftime('%Y-%m-%d %H:%M') }}
                     </div>
@@ -33,6 +33,7 @@
                             <label>コメント</label>
                             <textarea name="note_{{ submission.id }}" rows="2"></textarea>
                         </div>
+                        <button type="button" onclick="openDetail('/submissions/{{ submission.id }}')">詳細</button>
                         {% if latest_reviews[submission.id] %}
                             <div class="alert info">
                                 最新の承認: {{ latest_reviews[submission.id].status }} / {{ latest_reviews[submission.id].reviewer }} / {{ latest_reviews[submission.id].created_at.strftime('%Y-%m-%d %H:%M') }}
@@ -47,4 +48,17 @@
         {% endif %}
     </form>
 </section>
+<script>
+function openDetail(url) {
+    window.open(url, '_blank', 'width=1200,height=800');
+}
+document.querySelectorAll('.card.clickable-row').forEach(card => {
+    card.addEventListener('click', (event) => {
+        if (event.target.tagName === 'BUTTON' || event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'LABEL') {
+            return;
+        }
+        openDetail(card.dataset.detail);
+    });
+});
+</script>
 {% endblock %}
