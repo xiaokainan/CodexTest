@@ -1,3 +1,5 @@
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 import secrets
 import hashlib
@@ -23,12 +25,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 RECEIPT_DIR = DATA_DIR / "receipts"
 RECEIPT_DIR.mkdir(parents=True, exist_ok=True)
+LOG_DIR = DATA_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / "app.log"
 TESSERACT_CMD = os.getenv("TESSERACT_CMD")
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
 app.mount("/receipts", StaticFiles(directory=RECEIPT_DIR), name="receipts")
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
+
+logger = logging.getLogger("receipt_app")
+logger.setLevel(logging.INFO)
+
+if not logger.handlers:
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    file_handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=3)
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
 
 
 def hash_password(password: str, salt: str) -> str:
@@ -37,6 +54,25 @@ def hash_password(password: str, salt: str) -> str:
 
 def verify_password(password: str, salt: str, password_hash: str) -> bool:
     return hash_password(password, salt) == password_hash
+
+
+def get_audit_context(request: Request, user: Optional[User]) -> Dict[str, str | int | None]:
+    client_host = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "-")
+    return {
+        "user": user.username if user else None,
+        "user_name": user.full_name if user else None,
+        "role": user.role if user else None,
+        "ip": client_host,
+        "agent": user_agent,
+    }
+
+
+def log_action(action: str, request: Request, user: Optional[User], **details: Any) -> None:
+    context = get_audit_context(request, user)
+    merged = {**context, **details}
+    detail_str = " ".join(f"{key}={value}" for key, value in merged.items())
+    logger.info("%s %s", action, detail_str)
 
 
 def get_current_user(request: Request, db: Optional[Session]) -> Optional[User]:
@@ -114,6 +150,16 @@ async def create_submission(
     db.commit()
     db.refresh(submission)
 
+    log_action(
+        "submission_created",
+        request,
+        user,
+        submission_id=submission.id,
+        applicant=submission.applicant,
+        amount=submission.amount,
+        recipient=submission.recipient,
+    )
+
     response = RedirectResponse(url="/submissions?created=1", status_code=303)
     return response
 
@@ -186,6 +232,7 @@ async def approve_bulk(
         db.add(review)
 
     db.commit()
+    log_action("approval_recorded", request, get_current_user(request, db), reviewer=reviewer, actions=actions)
 
     response = RedirectResponse(url="/approvals?saved=1", status_code=303)
     return response
@@ -217,6 +264,7 @@ def login_form(request: Request) -> HTMLResponse:
 async def login(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)) -> RedirectResponse:
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_password(password, user.username, user.password_hash):
+        log_action("login_failed", request, user, username=username)
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "ユーザー名またはパスワードが正しくありません"},
@@ -226,11 +274,14 @@ async def login(request: Request, username: str = Form(...), password: str = For
     request.session["username"] = user.username
     request.session["full_name"] = user.full_name
     request.session["role"] = user.role
+    log_action("login_success", request, user)
     return RedirectResponse(url="/", status_code=303)
 
 
 @app.post("/auth/logout")
 async def logout(request: Request) -> RedirectResponse:
+    user = get_current_user(request, None)
+    log_action("logout", request, user)
     request.session.clear()
     return RedirectResponse(url="/", status_code=303)
 
@@ -266,6 +317,14 @@ async def register_user(
     new_user = User(username=username, full_name=full_name, password_hash=password_hash, role=role)
     db.add(new_user)
     db.commit()
+    log_action(
+        "user_registered",
+        request,
+        current_user,
+        created_username=username,
+        created_full_name=full_name,
+        created_role=role,
+    )
     return RedirectResponse(url="/auth/register?created=1", status_code=303)
 
 
