@@ -13,6 +13,37 @@ AllLink_V0.5 で提供する主な機能は以下のとおりです。
 6. **社内フロー作成 (AllLink)**: `/flows` で GUI ベースのフロー作成・承認ルート設定が可能。財務会計フローに加え、メールアドレス・PC・iPad・社内システムアカウントなど任意のフローを追加。
 7. **フロー別申請・承認**: フロー単位で申請登録、申請一覧、承認画面を用意し、登録データをフローごとに分離して表示。
 
+## 画面デザイン (Manus 風)
+- **ニュートラルな配色**: 明るい背景と青系アクセントで、視認性と落ち着きを両立。
+- **カード UI**: 情報ブロックは角丸＋シャドウで整理し、画面全体の階層を明確化。
+- **ピル型ボタン/ステータス**: 操作・状態をコンパクトに識別できるように統一。
+- **ヘッダーの情報密度**: ロゴ・説明・ナビ・ユーザー情報を上部に集約して、視線移動を最小化。
+
+## システム機能詳細
+各画面/機能の入出力と保存先を整理しています。
+
+### 1. 認証/ユーザー管理
+- **ログイン**: `/auth/login` でユーザー名・パスワードを認証。成功時にセッションを生成。
+- **ログアウト**: `/auth/logout` でセッション破棄。
+- **ユーザー登録**: 管理者のみ `/auth/register` で登録/権限設定が可能。
+- **ログ記録**: 成功/失敗を `data/logs/app.log` に記録。
+
+### 2. 財務会計フロー (領収書 OCR)
+- **登録**: `/` で画像アップロード → OCR 抽出 → `data/app.db` に保存。
+- **一覧**: `/submissions` で登録済み申請を検索・確認。
+- **承認**: `/approvals` で OK/NG とコメントを一括保存。
+- **画像保存**: `data/receipts/` に原本を格納し、DB は相対パスを保持。
+
+### 3. 汎用フロー (AllLink)
+- **フロー定義**: `/flows` でフロー名・承認ルートを GUI で登録。
+- **申請**: `/flows/<flow_id>/requests/new` でフロー別申請を登録。
+- **一覧**: `/flows/<flow_id>/requests` でフロー別の履歴を一覧表示。
+- **承認**: `/flows/<flow_id>/approvals` でフロー別に承認可能。
+
+### 4. 監査/トラッキング
+- **操作ログ**: ログイン/申請/承認/ログアウトを `data/logs/app.log` に記録。
+- **確認方法**: PowerShell なら `Get-Content data/logs/app.log -Tail 50` で直近を確認。
+
 ## セットアップ (Windows 11, PowerShell)
 以下は「誰がどこで何をどうやって実行し、成功をどう確認するか」を明示した手順です。
 
@@ -69,6 +100,41 @@ AllLink_V0.5 で提供する主な機能は以下のとおりです。
    - DB: `data/app.db` (SQLite)
    - 領収書画像: `data/receipts/`
 - 操作ログ: `data/logs/app.log`
+
+## 最終版まとめ (中文)
+以下は**安装步骤**と**系统功能说明**の最終版要点です。
+
+### 安装步骤 (Windows 11 / PowerShell)
+1. **准备环境**: 安装 Python 3.11+，并勾选 “Add python.exe to PATH”；安装 Tesseract OCR（含日文语言包）。
+2. **获取代码**:
+   ```powershell
+   git clone <repository-url> CodexTest
+   cd CodexTest
+   ```
+3. **创建虚拟环境并安装依赖**:
+   ```powershell
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+4. **设置环境变量 (可选)**:
+   ```powershell
+   $env:TESSERACT_CMD="C:\Program Files\Tesseract-OCR\tesseract.exe"
+   $env:DEFAULT_ADMIN_PASSWORD="your-strong-password"
+   $env:SESSION_SECRET="random-hex-string"
+   ```
+5. **启动服务**:
+   ```powershell
+   uvicorn app.main:app --reload
+   ```
+   浏览器访问 `http://127.0.0.1:8000/`，出现页面即启动成功。
+
+### 系统功能说明 (详细版)
+- **账号与权限**: 管理员可注册用户并设置角色（admin/user）。
+- **财务会计流程**: 领收书上传 → OCR 抽取 → 申请存档 → 承认/拒绝。
+- **通用流程**: 支持邮件/账号/设备等流程配置，自动生成申请/列表/承认页面。
+- **审计日志**: 所有关键操作写入 `data/logs/app.log`，可按时间追溯。
 
 ## Windows 11 で WSL (Ubuntu) を用いた隔離環境構築
 Windows 本体への影響を避けたい場合は、WSL 上の Ubuntu に AllLink_V0.5 をセットアップしてください。以下は PowerShell からの手順です。

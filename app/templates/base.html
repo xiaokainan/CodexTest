@@ -7,34 +7,40 @@
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<header>
+<header class="app-header">
     <div class="container">
-        <h1>AllLink 承認ポータル</h1>
-        <nav>
-            <a href="/">アップロード</a>
-            <a href="/submissions">申請一覧</a>
-            <a href="/approvals">承認</a>
-            <a href="/flows">フロー管理</a>
-            <span class="nav-actions">
+        <div class="brand">
+            <p class="eyebrow">AllLink Workflow Hub</p>
+            <h1>AllLink 承認ポータル</h1>
+            <p class="muted">申請・承認・監査ログをひとつの画面でまとめて管理。</p>
+        </div>
+        <nav class="nav-bar">
+            <div class="nav-links">
+                <a href="/">アップロード</a>
+                <a href="/submissions">申請一覧</a>
+                <a href="/approvals">承認</a>
+                <a href="/flows">フロー管理</a>
+            </div>
+            <div class="nav-actions">
                 {% if user %}
-                    <span>ログイン中: {{ user.full_name }} ({{ user.role }})</span>
+                    <span class="user-pill">ログイン中: {{ user.full_name }} ({{ user.role }})</span>
                     {% if user.role == 'admin' %}
-                        <a href="/auth/register">ユーザー登録</a>
+                        <a href="/auth/register" class="button ghost">ユーザー登録</a>
                     {% endif %}
                     <form action="/auth/logout" method="post">
-                        <button type="submit">ログアウト</button>
+                        <button type="submit" class="ghost-button">ログアウト</button>
                     </form>
                 {% else %}
-                    <a href="/auth/login">ログイン</a>
+                    <a href="/auth/login" class="button">ログイン</a>
                 {% endif %}
-            </span>
+            </div>
         </nav>
     </div>
 </header>
 <main class="container">
     {% block content %}{% endblock %}
 </main>
-<footer>
+<footer class="app-footer">
     <div class="container">
         <p>ローカル環境で利用する簡易システムです。</p>
     </div>
