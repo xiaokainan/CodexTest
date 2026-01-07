@@ -9,26 +9,28 @@
 <body>
 <header>
     <div class="container">
-        <h1>AllLink 承認ポータル</h1>
-        <nav>
-            <a href="/">アップロード</a>
-            <a href="/submissions">申請一覧</a>
-            <a href="/approvals">承認</a>
-            <a href="/flows">フロー管理</a>
-            <span class="nav-actions">
-                {% if user %}
-                    <span>ログイン中: {{ user.full_name }} ({{ user.role }})</span>
-                    {% if user.role == 'admin' %}
-                        <a href="/auth/register">ユーザー登録</a>
+        <div class="topbar">
+            <h1 class="logo">AllLink <span>Flow Hub</span></h1>
+            <nav>
+                <a href="/">アップロード</a>
+                <a href="/submissions">申請一覧</a>
+                <a href="/approvals">承認</a>
+                <a href="/flows">フロー管理</a>
+                <span class="nav-actions">
+                    {% if user %}
+                        <span>ログイン中: {{ user.full_name }} ({{ user.role }})</span>
+                        {% if user.role == 'admin' %}
+                            <a href="/auth/register">ユーザー登録</a>
+                        {% endif %}
+                        <form action="/auth/logout" method="post">
+                            <button type="submit">ログアウト</button>
+                        </form>
+                    {% else %}
+                        <a href="/auth/login">ログイン</a>
                     {% endif %}
-                    <form action="/auth/logout" method="post">
-                        <button type="submit">ログアウト</button>
-                    </form>
-                {% else %}
-                    <a href="/auth/login">ログイン</a>
-                {% endif %}
-            </span>
-        </nav>
+                </span>
+            </nav>
+        </div>
     </div>
 </header>
 <main class="container">
