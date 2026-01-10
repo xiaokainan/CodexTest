@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<section>
+    <h2>ダッシュボード</h2>
+    <p class="muted">申請・承認状況の統計をまとめて確認できます。</p>
+    <div class="grid">
+        <article class="card">
+            <h3>領収書フロー</h3>
+            <p><strong>総申請数:</strong> {{ submission_total }}</p>
+            <p><strong>OK:</strong> {{ submission_ok }} / <strong>NG:</strong> {{ submission_ng }}</p>
+            <p><strong>承認率:</strong> {{ submission_approval_rate if submission_approval_rate is not none else '-' }}%</p>
+            <p><strong>平均処理時間:</strong> {{ submission_avg_processing_hours if submission_avg_processing_hours is not none else '-' }} 時間</p>
+            <div class="actions">
+                <a class="button ghost" href="/submissions">申請一覧へ</a>
+                <a class="button ghost" href="/approvals">承認画面へ</a>
+            </div>
+        </article>
+        <article class="card">
+            <h3>汎用フロー</h3>
+            <p><strong>総申請数:</strong> {{ flow_total }}</p>
+            <p><strong>承認:</strong> {{ flow_approved }} / <strong>否認:</strong> {{ flow_rejected }} / <strong>保留:</strong> {{ flow_pending }}</p>
+            <p><strong>承認率:</strong> {{ flow_approval_rate if flow_approval_rate is not none else '-' }}%</p>
+            <p><strong>平均処理時間:</strong> {{ flow_avg_processing_hours if flow_avg_processing_hours is not none else '-' }} 時間</p>
+            <div class="actions">
+                <a class="button ghost" href="/flows">フロー管理へ</a>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}

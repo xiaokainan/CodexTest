@@ -2,6 +2,10 @@
 {% block content %}
 <section>
     <h2>2. 申請一覧</h2>
+    <div class="actions">
+        <a class="button ghost" href="/exports/submissions?format=csv">CSV エクスポート</a>
+        <a class="button ghost" href="/exports/submissions?format=pdf">PDF エクスポート</a>
+    </div>
     {% if created %}
         <div class="alert success">申請を登録しました。</div>
     {% endif %}
