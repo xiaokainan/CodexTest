@@ -78,6 +78,10 @@ AllLink_V0.5 で提供する主な機能は以下のとおりです。
      ```powershell
      $env:SESSION_SECRET="random-hex-string"
      ```
+   - 中小企業向けのデフォルトは SQLite (ローカル) です。PostgreSQL などへ切り替える場合:
+     ```powershell
+     $env:DATABASE_URL="postgresql+psycopg2://user:password@localhost:5432/alllink"
+     ```
 
 5. **アプリを起動 (実行者: 開発者・場所: `CodexTest` 直下)**
    ```powershell
@@ -149,28 +153,37 @@ wsl --install -d Ubuntu
 ```
 - 再起動後に Ubuntu を開き、求められたら Linux ユーザー名とパスワードを作成。
 
-### 2. Ubuntu 内で依存関係を導入
+### 2. Ubuntu_AllLink を作成
+Ubuntu をベースに隔離用のディストリビューション `Ubuntu_AllLink` を作成します。
 ```powershell
-wsl -d Ubuntu -- sudo apt-get update -y
-wsl -d Ubuntu -- sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git tesseract-ocr tesseract-ocr-jpn libtesseract-dev
+wsl --export Ubuntu "$env:TEMP\\ubuntu_base.tar"
+wsl --import Ubuntu_AllLink "$env:LOCALAPPDATA\\WSL\\Ubuntu_AllLink" "$env:TEMP\\ubuntu_base.tar"
+Remove-Item "$env:TEMP\\ubuntu_base.tar"
 ```
 
-### 3. ソース取得と仮想環境
+### 3. Ubuntu 内で依存関係を導入
 ```powershell
-wsl -d Ubuntu -- git clone https://github.com/xiaokainan/CodexTest.git ~/AllLink_V0_5
-wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_5 && python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt && mkdir -p data/logs data/receipts"
+wsl -d Ubuntu_AllLink -- sudo apt-get update -y
+wsl -d Ubuntu_AllLink -- sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git tesseract-ocr tesseract-ocr-jpn libtesseract-dev
 ```
 
-### 4. アプリを起動
+### 4. ソース取得と仮想環境
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_5 && . .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+wsl -d Ubuntu_AllLink -- git clone https://github.com/xiaokainan/CodexTest.git ~/AllLink_V0_5
+wsl -d Ubuntu_AllLink -- bash -lc "cd ~/AllLink_V0_5 && python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt && mkdir -p data/logs data/receipts"
+```
+
+### 5. アプリを起動
+```powershell
+wsl -d Ubuntu_AllLink -- bash -lc "cd ~/AllLink_V0_5 && . .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 ```
 - ブラウザで `http://localhost:8000/` を開けば WSL 上のアプリにアクセス可能。
 
-### 5. 自動化バッチ (推奨)
+### 6. 自動化バッチ (推奨)
 ルートにある `setup_wsl_alllink.bat` を管理者権限の PowerShell から実行すると、次を自動化します:
 
 - WSL および Ubuntu の有無を確認し、未導入なら `wsl --install -d Ubuntu` でセットアップ（再起動が必要な場合あり）。
+- Ubuntu から隔離用の `Ubuntu_AllLink` を作成。
 - Ubuntu 内で Python/Tesseract/git などをインストール。
 - リポジトリの clone または git pull。
 - 仮想環境 `.venv` の作成と依存関係のインストール。
