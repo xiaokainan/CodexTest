@@ -1,14 +1,19 @@
+import csv
+import io
 import logging
 from logging.handlers import RotatingFileHandler
 import os
 import secrets
 import hashlib
+import smtplib
 from datetime import datetime
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from statistics import mean
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -73,6 +78,34 @@ def log_action(action: str, request: Request, user: Optional[User], **details: A
     merged = {**context, **details}
     detail_str = " ".join(f"{key}={value}" for key, value in merged.items())
     logger.info("%s %s", action, detail_str)
+
+
+def send_email_notification(subject: str, body: str) -> None:
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user or "alllink@local"
+    smtp_to = os.getenv("SMTP_TO")
+    if not smtp_host or not smtp_to:
+        logger.info("notification_skipped reason=missing_smtp_config")
+        return
+
+    message = EmailMessage()
+    message["Subject"] = subject
+    message["From"] = smtp_from
+    message["To"] = smtp_to
+    message.set_content(body)
+
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as smtp:
+            if os.getenv("SMTP_STARTTLS", "1") == "1":
+                smtp.starttls()
+            if smtp_user and smtp_password:
+                smtp.login(smtp_user, smtp_password)
+            smtp.send_message(message)
+    except (smtplib.SMTPException, OSError) as exc:
+        logger.warning("notification_failed error=%s", exc)
 
 
 def get_current_user(request: Request, db: Optional[Session]) -> Optional[User]:
@@ -198,6 +231,19 @@ async def create_submission(
         amount=submission.amount,
         recipient=submission.recipient,
     )
+    send_email_notification(
+        "AllLink 申請登録通知",
+        "\n".join(
+            [
+                f"申請ID: {submission.id}",
+                f"申請者: {submission.applicant}",
+                f"日付: {submission.date or '-'}",
+                f"宛先: {submission.recipient or '-'}",
+                f"金額: {submission.amount or '-'}",
+                f"登録番号: {submission.registration_number or '-'}",
+            ]
+        ),
+    )
 
     response = RedirectResponse(url="/submissions?created=1", status_code=303)
     return response
@@ -214,6 +260,274 @@ def list_submissions(request: Request, created: int | None = None, db: Session =
             "created": created,
             "user": get_current_user(request, db),
         },
+    )
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    user = get_current_user(request, db)
+    submissions = db.query(Submission).order_by(Submission.created_at.desc()).all()
+    latest_reviews: Dict[int, Review | None] = {}
+    for submission in submissions:
+        latest_reviews[submission.id] = (
+            db.query(Review)
+            .filter(Review.submission_id == submission.id)
+            .order_by(Review.created_at.desc())
+            .first()
+        )
+
+    reviewed = [review for review in latest_reviews.values() if review]
+    ok_count = sum(1 for review in reviewed if review.status == "OK")
+    ng_count = sum(1 for review in reviewed if review.status == "NG")
+    approval_rate = round((ok_count / len(reviewed)) * 100, 1) if reviewed else None
+
+    processing_times = []
+    for submission in submissions:
+        review = latest_reviews.get(submission.id)
+        if review:
+            processing_times.append((review.created_at - submission.created_at).total_seconds() / 3600)
+    avg_processing_hours = round(mean(processing_times), 2) if processing_times else None
+
+    flow_requests = db.query(FlowRequest).order_by(FlowRequest.created_at.desc()).all()
+    flow_approved = sum(1 for record in flow_requests if record.status == "approved")
+    flow_rejected = sum(1 for record in flow_requests if record.status == "rejected")
+    flow_pending = sum(1 for record in flow_requests if record.status == "pending")
+    flow_reviewed_total = flow_approved + flow_rejected
+    flow_approval_rate = round((flow_approved / flow_reviewed_total) * 100, 1) if flow_reviewed_total else None
+    flow_processing_times = []
+    for record in flow_requests:
+        latest = (
+            db.query(FlowRequestApproval)
+            .filter(FlowRequestApproval.request_id == record.id)
+            .order_by(FlowRequestApproval.created_at.desc())
+            .first()
+        )
+        if latest and record.status in {"approved", "rejected"}:
+            flow_processing_times.append((latest.created_at - record.created_at).total_seconds() / 3600)
+    flow_avg_processing_hours = round(mean(flow_processing_times), 2) if flow_processing_times else None
+
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "user": user,
+            "submission_total": len(submissions),
+            "submission_ok": ok_count,
+            "submission_ng": ng_count,
+            "submission_approval_rate": approval_rate,
+            "submission_avg_processing_hours": avg_processing_hours,
+            "flow_total": len(flow_requests),
+            "flow_approved": flow_approved,
+            "flow_rejected": flow_rejected,
+            "flow_pending": flow_pending,
+            "flow_approval_rate": flow_approval_rate,
+            "flow_avg_processing_hours": flow_avg_processing_hours,
+        },
+    )
+
+
+@app.get("/api/submissions")
+def api_submissions(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+    submissions = db.query(Submission).order_by(Submission.created_at.desc()).all()
+    return [
+        {
+            "id": submission.id,
+            "applicant": submission.applicant,
+            "applicant_login": submission.applicant_login,
+            "date": submission.date,
+            "recipient": submission.recipient,
+            "amount": submission.amount,
+            "registration_number": submission.registration_number,
+            "image_path": submission.image_path,
+            "created_at": submission.created_at.isoformat(),
+        }
+        for submission in submissions
+    ]
+
+
+@app.get("/api/flows/{flow_id}/requests")
+def api_flow_requests(flow_id: int, db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
+    flow = get_flow_or_404(flow_id, db)
+    requests = (
+        db.query(FlowRequest)
+        .filter(FlowRequest.flow_id == flow.id)
+        .order_by(FlowRequest.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": record.id,
+            "flow_id": record.flow_id,
+            "title": record.title,
+            "description": record.description,
+            "applicant": record.applicant,
+            "applicant_login": record.applicant_login,
+            "status": record.status,
+            "created_at": record.created_at.isoformat(),
+            "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+        }
+        for record in requests
+    ]
+
+
+def build_submission_csv(submissions: List[Submission]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "申請者", "ログインID", "日付", "宛先", "金額", "登録番号", "登録日時", "画像パス"])
+    for submission in submissions:
+        writer.writerow(
+            [
+                submission.id,
+                submission.applicant,
+                submission.applicant_login or "",
+                submission.date or "",
+                submission.recipient or "",
+                submission.amount or "",
+                submission.registration_number or "",
+                submission.created_at.strftime("%Y-%m-%d %H:%M"),
+                submission.image_path,
+            ]
+        )
+    return output.getvalue()
+
+
+def sanitize_pdf_text(text: str) -> str:
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def build_pdf_document(lines: List[str]) -> bytes:
+    content_lines = ["BT", "/F1 10 Tf", "50 780 Td"]
+    for idx, line in enumerate(lines):
+        safe = sanitize_pdf_text(line).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        content_lines.append(f"({safe}) Tj")
+        if idx < len(lines) - 1:
+            content_lines.append("T*")
+    content_lines.append("ET")
+    content = "\n".join(content_lines)
+    content_bytes = content.encode("latin-1")
+
+    objects: List[bytes] = []
+    objects.append(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
+    objects.append(b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n")
+    objects.append(
+        b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+        b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n"
+    )
+    objects.append(
+        b"4 0 obj << /Length "
+        + str(len(content_bytes)).encode("ascii")
+        + b" >> stream\n"
+        + content_bytes
+        + b"\nendstream endobj\n"
+    )
+    objects.append(b"5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n")
+
+    result = io.BytesIO()
+    result.write(b"%PDF-1.4\n")
+    offsets = [0]
+    for obj in objects:
+        offsets.append(result.tell())
+        result.write(obj)
+    xref_start = result.tell()
+    result.write(b"xref\n")
+    result.write(f"0 {len(offsets)}\n".encode("ascii"))
+    result.write(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        result.write(f"{offset:010d} 00000 n \n".encode("ascii"))
+    result.write(b"trailer << /Size ")
+    result.write(str(len(offsets)).encode("ascii"))
+    result.write(b" /Root 1 0 R >>\nstartxref\n")
+    result.write(str(xref_start).encode("ascii"))
+    result.write(b"\n%%EOF")
+    return result.getvalue()
+
+
+def build_submission_pdf(submissions: List[Submission]) -> bytes:
+    lines = ["AllLink Submissions Export"]
+    for submission in submissions:
+        lines.extend(
+            [
+                f"ID: {submission.id} 申請者: {submission.applicant} ({submission.applicant_login or '-'})",
+                f"日付: {submission.date or '-'} 宛先: {submission.recipient or '-'} 金額: {submission.amount or '-'} 登録番号: {submission.registration_number or '-'}",
+                f"登録日時: {submission.created_at.strftime('%Y-%m-%d %H:%M')} 画像: {submission.image_path}",
+                "",
+            ]
+        )
+    return build_pdf_document(lines)
+
+
+@app.get("/exports/submissions")
+def export_submissions(format: str = "csv", db: Session = Depends(get_db)) -> StreamingResponse:
+    submissions = db.query(Submission).order_by(Submission.created_at.desc()).all()
+    if format == "pdf":
+        pdf_bytes = build_submission_pdf(submissions)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=submissions.pdf"},
+        )
+    csv_data = build_submission_csv(submissions)
+    return StreamingResponse(
+        iter([csv_data]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=submissions.csv"},
+    )
+
+
+def build_flow_request_csv(records: List[FlowRequest]) -> str:
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["ID", "件名", "申請者", "ログインID", "状態", "申請日時", "更新日時"])
+    for record in records:
+        writer.writerow(
+            [
+                record.id,
+                record.title,
+                record.applicant,
+                record.applicant_login or "",
+                record.status,
+                record.created_at.strftime("%Y-%m-%d %H:%M"),
+                record.updated_at.strftime("%Y-%m-%d %H:%M") if record.updated_at else "",
+            ]
+        )
+    return output.getvalue()
+
+
+def build_flow_request_pdf(records: List[FlowRequest], flow: Flow) -> bytes:
+    lines = [f"AllLink Flow Export: {flow.name}"]
+    for record in records:
+        lines.extend(
+            [
+                f"ID: {record.id} 件名: {record.title}",
+                f"申請者: {record.applicant} ({record.applicant_login or '-'}) 状態: {record.status}",
+                f"申請日時: {record.created_at.strftime('%Y-%m-%d %H:%M')} 更新日時: {record.updated_at.strftime('%Y-%m-%d %H:%M') if record.updated_at else '-'}",
+                "",
+            ]
+        )
+    return build_pdf_document(lines)
+
+
+@app.get("/exports/flows/{flow_id}")
+def export_flow_requests(flow_id: int, format: str = "csv", db: Session = Depends(get_db)) -> StreamingResponse:
+    flow = get_flow_or_404(flow_id, db)
+    records = (
+        db.query(FlowRequest)
+        .filter(FlowRequest.flow_id == flow.id)
+        .order_by(FlowRequest.created_at.desc())
+        .all()
+    )
+    if format == "pdf":
+        pdf_bytes = build_flow_request_pdf(records, flow)
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=flow_{flow.id}.pdf"},
+        )
+    csv_data = build_flow_request_csv(records)
+    return StreamingResponse(
+        iter([csv_data]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=flow_{flow.id}.csv"},
     )
 
 
@@ -272,6 +586,16 @@ async def approve_bulk(
 
     db.commit()
     log_action("approval_recorded", request, get_current_user(request, db), reviewer=reviewer, actions=actions)
+    send_email_notification(
+        "AllLink 承認通知",
+        "\n".join(
+            [
+                f"承認者: {reviewer}",
+                f"対象件数: {len(actions)}",
+                f"申請ID一覧: {', '.join(str(item) for item in actions.keys())}",
+            ]
+        ),
+    )
 
     response = RedirectResponse(url="/approvals?saved=1", status_code=303)
     return response
@@ -614,6 +938,17 @@ async def submit_flow_approvals(
         flow_id=flow.id,
         actions=list(actions.keys()),
         reviewer=reviewer or user.username,
+    )
+    send_email_notification(
+        "AllLink フロー承認通知",
+        "\n".join(
+            [
+                f"フロー: {flow.name}",
+                f"承認者: {reviewer or user.username}",
+                f"対象件数: {len(actions)}",
+                f"申請ID一覧: {', '.join(str(item) for item in actions.keys())}",
+            ]
+        ),
     )
     return RedirectResponse(url=f"/flows/{flow.id}/approvals?saved=1", status_code=303)
 
