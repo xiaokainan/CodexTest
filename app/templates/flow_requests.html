@@ -9,6 +9,8 @@
     <div class="actions">
         <a class="button ghost" href="/flows">フロー一覧</a>
         <a class="button ghost" href="/flows/{{ flow.id }}/approvals">承認画面</a>
+        <a class="button ghost" href="/exports/flows/{{ flow.id }}?format=csv">CSV エクスポート</a>
+        <a class="button ghost" href="/exports/flows/{{ flow.id }}?format=pdf">PDF エクスポート</a>
         <a class="button" href="/flows/{{ flow.id }}/requests/new">新規申請</a>
     </div>
 </div>

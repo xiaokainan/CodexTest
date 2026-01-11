@@ -1,9 +1,9 @@
 # 領収書 OCR 審査サンプル (CodexTest / AllLink)
 
-ローカル環境（Windows 11/WSL(Ubuntu) 向け想定）で領収書画像を OCR し、抽出結果を保存・一覧・承認できる Web アプリです。2024/11 以降は社内ワークフロー統合ツール **AllLink** として、メール・PC・各種アカウント申請などの汎用フローも GUI で作成・承認できます。ログイン/申請/承認/ログアウトの操作ログを `data/logs/app.log` に記録します。
+ローカル環境（Windows 11/WSL(Ubuntu) 向け想定）で領収書画像を OCR し、抽出結果を保存・一覧・承認できる Web アプリです。2024/11 以降は社内ワークフロー統合ツール **AllLink** として、メール・PC・各種アカウント申請などの汎用フローも GUI で作成・承認できます。ログイン/申請/承認/ログアウトの操作ログを `data/logs/app.log` に記録し、通知・統計・エクスポート・API 連携にも対応します。
 
-## 機能 (AllLink_V0.5)
-AllLink_V0.5 で提供する主な機能は以下のとおりです。
+## 機能 (AllLink_V0.6)
+AllLink_V0.6 で提供する主な機能は以下のとおりです。
 
 1. **申請登録（財務会計フロー）**: 領収書画像をアップロードすると、日付/宛先/金額/登録番号を OCR で抽出し、申請者（初期値 XYY）、画像パスと一緒に SQLite DB へ保存。
 2. **申請一覧**: これまでの申請をテーブルで表示。画像へのリンク付き。
@@ -12,6 +12,11 @@ AllLink_V0.5 で提供する主な機能は以下のとおりです。
 5. **監査ログ**: ログイン/ログアウト/申請/承認などの操作ログを `data/logs/app.log` に記録。
 6. **社内フロー作成 (AllLink)**: `/flows` で GUI ベースのフロー作成・承認ルート設定が可能。財務会計フローに加え、メールアドレス・PC・iPad・社内システムアカウントなど任意のフローを追加。
 7. **フロー別申請・承認**: フロー単位で申請登録、申請一覧、承認画面を用意し、登録データをフローごとに分離して表示。
+8. **メール通知**: 申請・承認時に SMTP 経由で通知メールを送信。
+9. **ダッシュボード**: 承認率や平均処理時間などの統計を `/dashboard` で可視化。
+10. **API 連携**: `/api/submissions` や `/api/flows/{id}/requests` から JSON 取得が可能。
+11. **エクスポート**: CSV（Excel）/PDF で申請一覧を出力。
+12. **モバイル対応**: レスポンシブ UI によりスマホブラウザからの申請/承認が可能。
 
 ## 画面デザイン (Manus 風)
 - **ニュートラルな配色**: 明るい背景と青系アクセントで、視認性と落ち着きを両立。
@@ -43,6 +48,23 @@ AllLink_V0.5 で提供する主な機能は以下のとおりです。
 ### 4. 監査/トラッキング
 - **操作ログ**: ログイン/申請/承認/ログアウトを `data/logs/app.log` に記録。
 - **確認方法**: PowerShell なら `Get-Content data/logs/app.log -Tail 50` で直近を確認。
+
+### 5. ダッシュボード (統計)
+- **アクセス**: `/dashboard` で統計情報をカード表示。
+- **指標**: 申請数、承認率、平均処理時間（時間単位）。
+
+### 6. 通知 (メール)
+- **送信タイミング**: 申請登録・承認保存の直後に通知。
+- **設定**: `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` / `SMTP_TO` を環境変数で指定。
+
+### 7. エクスポート
+- **領収書申請**: `/exports/submissions?format=csv|pdf`
+- **汎用フロー申請**: `/exports/flows/<flow_id>?format=csv|pdf`
+- **用途**: CSV を Excel で開けます。PDF は簡易スナップショット用途（日本語は `?` に置換される場合があります）。
+
+### 8. API 連携
+- **申請一覧 API**: `/api/submissions`
+- **フロー申請 API**: `/api/flows/<flow_id>/requests`
 
 ## セットアップ (Windows 11, PowerShell)
 以下は「誰がどこで何をどうやって実行し、成功をどう確認するか」を明示した手順です。
@@ -78,6 +100,15 @@ AllLink_V0.5 で提供する主な機能は以下のとおりです。
      ```powershell
      $env:SESSION_SECRET="random-hex-string"
      ```
+   - メール通知を使う場合:
+     ```powershell
+     $env:SMTP_HOST="smtp.example.com"
+     $env:SMTP_PORT="587"
+     $env:SMTP_USER="smtp-user@example.com"
+     $env:SMTP_PASSWORD="smtp-password"
+     $env:SMTP_FROM="alllink@example.com"
+     $env:SMTP_TO="finance@example.com"
+     ```
 
 5. **アプリを起動 (実行者: 開発者・場所: `CodexTest` 直下)**
    ```powershell
@@ -89,8 +120,10 @@ AllLink_V0.5 で提供する主な機能は以下のとおりです。
    1. **ログイン**: `/auth/login` で `admin` / `DEFAULT_ADMIN_PASSWORD` でサインイン。成功するとトップにリダイレクト。
    2. **申請登録**: トップで領収書画像をアップロードし送信。`/submissions` に登録された行が増えていれば成功。
    3. **承認**: `/approvals` で OK/NG を選び送信。直近の承認結果がカード下部に表示されれば成功。
-   4. **ログアウト**: 画面のログアウトボタンを押す。再びトップへ戻り、ログイン画面が必要になる状態なら成功。
-   5. **ログ確認**: 操作ログは `data/logs/app.log` に追記される。PowerShell で確認:
+   4. **ダッシュボード**: `/dashboard` で統計カードが表示されれば成功。
+   5. **エクスポート**: `/exports/submissions?format=csv` を開き、CSV がダウンロードされれば成功。
+   6. **ログアウト**: 画面のログアウトボタンを押す。再びトップへ戻り、ログイン画面が必要になる状態なら成功。
+   7. **ログ確認**: 操作ログは `data/logs/app.log` に追記される。PowerShell で確認:
       ```powershell
       Get-Content data/logs/app.log -Tail 20
       ```
@@ -135,9 +168,21 @@ AllLink_V0.5 で提供する主な機能は以下のとおりです。
 - **财务会计流程**: 领收书上传 → OCR 抽取 → 申请存档 → 承认/拒绝。
 - **通用流程**: 支持邮件/账号/设备等流程配置，自动生成申请/列表/承认页面。
 - **审计日志**: 所有关键操作写入 `data/logs/app.log`，可按时间追溯。
+- **邮件通知**: 申請与承认触发 SMTP 邮件提醒。
+- **统计看板**: `/dashboard` 展示承认率与平均处理时间。
+- **导出**: 支持 CSV（Excel）/PDF 导出。
+- **API**: 提供 JSON 接口便于系统对接。
 
-## Windows 11 で WSL (Ubuntu) を用いた隔離環境構築
-Windows 本体への影響を避けたい場合は、WSL 上の Ubuntu に AllLink_V0.5 をセットアップしてください。以下は PowerShell からの手順です。
+## Windows 11 で WSL (Ubuntu_AllLink) を用いた隔離環境構築
+Windows 本体への影響を避けたい場合は、WSL 上に **Ubuntu_AllLink** という専用ディストリビューションを作成し、AllLink_V0.6 をセットアップしてください。以下は PowerShell からの手順です。
+
+### 仕組みの理解 (はじめての方向け)
+- **WSLとは**: Windows 上で Linux 環境を動かす仕組みです。Linux のファイルや Python パッケージは Windows と分離され、誤操作の影響を最小化できます。
+- **Ubuntu と Ubuntu_AllLink の違い**: `Ubuntu` はベースの Linux です。`Ubuntu_AllLink` はそのベースを複製した専用環境で、AllLink 専用の隔離ボックスとして使います。
+- **export/import の意味**:
+  - `wsl --export Ubuntu ...` は Ubuntu の「丸ごとコピー用のスナップショット (rootfs)」を作ります。
+  - `wsl --import Ubuntu_AllLink ...` はそのスナップショットから新しい Linux 環境を作成します。
+- **Windows から WSL を操作する理由**: `wsl -d Ubuntu_AllLink -- <command>` とすることで、Windows の PowerShell から Linux に命令を実行できます。初心者でも迷いにくくなります。
 
 ### 0. 事前確認
 - PowerShell を「管理者として実行」する。
@@ -149,40 +194,65 @@ wsl --install -d Ubuntu
 ```
 - 再起動後に Ubuntu を開き、求められたら Linux ユーザー名とパスワードを作成。
 
-### 2. Ubuntu 内で依存関係を導入
+### 2. Ubuntu_AllLink を作成 (隔離環境)
 ```powershell
-wsl -d Ubuntu -- sudo apt-get update -y
-wsl -d Ubuntu -- sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git tesseract-ocr tesseract-ocr-jpn libtesseract-dev
+wsl --export Ubuntu "$env:TEMP\\ubuntu_alllink_rootfs.tar"
+wsl --import Ubuntu_AllLink "$env:USERPROFILE\\WSL\\Ubuntu_AllLink" "$env:TEMP\\ubuntu_alllink_rootfs.tar" --version 2
+Remove-Item "$env:TEMP\\ubuntu_alllink_rootfs.tar"
 ```
+- 作成後に **Ubuntu_AllLink** を起動し、Linux ユーザー名とパスワードを設定。
+- **何が起きているか**: Ubuntu をコピーして Ubuntu_AllLink を作成したため、以後は AllLink の作業をこの隔離環境だけで行います。
 
-### 3. ソース取得と仮想環境
+### 3. Ubuntu_AllLink 内で依存関係を導入
 ```powershell
-wsl -d Ubuntu -- git clone https://github.com/xiaokainan/CodexTest.git ~/AllLink_V0_5
-wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_5 && python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt && mkdir -p data/logs data/receipts"
+wsl -d Ubuntu_AllLink -- sudo apt-get update -y
+wsl -d Ubuntu_AllLink -- sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip git tesseract-ocr tesseract-ocr-jpn libtesseract-dev
 ```
+- **何が起きているか**: Ubuntu_AllLink 内に Python、Git、OCR をインストールしています。Windows 本体には影響しません。
 
-### 4. アプリを起動
+### 4. ソース取得と仮想環境
 ```powershell
-wsl -d Ubuntu -- bash -lc "cd ~/AllLink_V0_5 && . .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+wsl -d Ubuntu_AllLink -- git clone https://github.com/xiaokainan/CodexTest.git ~/AllLink_V0_6
+wsl -d Ubuntu_AllLink -- bash -lc "cd ~/AllLink_V0_6 && python3 -m venv .venv && . .venv/bin/activate && python -m pip install --upgrade pip && pip install -r requirements.txt && mkdir -p data/logs data/receipts"
+```
+- **何が起きているか**:
+  - `git clone` で Linux 環境にソースコードを保存。
+  - `python3 -m venv .venv` で仮想環境を作り、依存関係を隔離。
+  - `pip install -r requirements.txt` で必要な Python ライブラリを導入。
+  - `data/logs` と `data/receipts` を作成してログ/画像保存先を用意。
+
+### 5. アプリを起動
+```powershell
+wsl -d Ubuntu_AllLink -- bash -lc "cd ~/AllLink_V0_6 && . .venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port 8000"
 ```
 - ブラウザで `http://localhost:8000/` を開けば WSL 上のアプリにアクセス可能。
+- **停止方法**: 起動しているターミナルで `Ctrl + C` を押します。
+- **確認ポイント**: 起動ログに `Application startup complete` と表示されたら成功です。
 
-### 5. 自動化バッチ (推奨)
+### 6. 自動化バッチ (推奨)
 ルートにある `setup_wsl_alllink.bat` を管理者権限の PowerShell から実行すると、次を自動化します:
 
 - WSL および Ubuntu の有無を確認し、未導入なら `wsl --install -d Ubuntu` でセットアップ（再起動が必要な場合あり）。
-- Ubuntu 内で Python/Tesseract/git などをインストール。
+- Ubuntu から **Ubuntu_AllLink** を複製し、隔離環境を作成。
+- Ubuntu_AllLink 内で Python/Tesseract/git などをインストール。
 - リポジトリの clone または git pull。
 - 仮想環境 `.venv` の作成と依存関係のインストール。
 - データディレクトリ (`data/logs`, `data/receipts`) の作成。
 
 再起動が必要になった場合は、再起動後にもう一度バッチを実行してください。起動は手順 4 と同じコマンドで行えます。
 
+## トラブルシューティング (初学者向け)
+- **`wsl --install` が失敗する**: Windows の機能で「仮想マシンプラットフォーム」が無効の可能性があります。管理者 PowerShell で `dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart` を実行後に再起動してください。
+- **Ubuntu_AllLink が見つからない**: `wsl -l -v` で一覧を確認し、作成済みなら `wsl -d Ubuntu_AllLink` で起動してください。
+- **ポート 8000 が使えない**: 既に他のアプリが使っている可能性があります。`--port 8001` に変更して起動してください。
+- **OCR が動かない**: `tesseract --version` を `wsl -d Ubuntu_AllLink -- tesseract --version` で確認し、出力がなければインストール手順を再実行してください。
 ## 使い方
 - **申請 (機能1)**: トップページから申請者（初期値 XYY）と領収書画像を選択して送信。OCR 抽出結果と画像パスが DB に保存されます。
 - **一覧 (機能2)**: `/submissions` で申請履歴を確認。画像は `/receipts/...` から直接参照可能。
 - **承認 (機能3)**: `/approvals` で各申請の画像と抽出値を確認し、OK/NG とコメントを入力して一括保存。最新の承認結果がカード下部に表示されます。
 - **汎用フロー (機能6-7)**: `/flows` で新規フローを作成し、ステップごとの承認ルートを GUI で設定。各フローに対し「申請一覧」「承認」「新規申請」画面が自動生成されます。
+- **ダッシュボード**: `/dashboard` で承認率・処理時間などの統計を確認。
+- **エクスポート**: 申請一覧画面の CSV/PDF ボタンから出力。
 
 ## 補足
 - データは `data/app.db` (SQLite) に保存されます。領収書画像は `data/receipts/` 配下へ保存されます。
